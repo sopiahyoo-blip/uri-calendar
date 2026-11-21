@@ -134,7 +134,7 @@ svg{display:block}
 .row>span:first-child{font-weight:600;flex:none}
 .dt{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
 .dt input,.inp{border:0;background:var(--soft);border-radius:8px;padding:7px 9px;outline:0;min-height:36px}
-.allday .t-only{display:none}
+.event-period{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:10px;padding:9px 14px}.event-period label{display:grid;gap:4px;font-size:13px;font-weight:600}.event-period input{box-sizing:border-box;min-width:0;width:100%;font:inherit;color:inherit}.allday .event-period{grid-template-columns:1fr}.allday .t-only{display:none}
 textarea{width:100%;margin-top:16px;min-height:84px;border:1px solid var(--line);border-radius:14px;padding:12px 14px;outline:0;resize:vertical}
 .switch{position:relative;width:48px;height:28px;flex:none}
 .switch input{opacity:0;position:absolute;inset:0;margin:0}
@@ -894,7 +894,7 @@ function evItem(e) {
 /* 일정 만들기·고치기 */
 function openEditor(ev, date, fromDay) {
   const isNew = !ev;
-  const e = ev ? { ...ev } : { id: uid(), title: '', owner: cfg.me, start: date, end: date, allDay: true, st: '', et: '', memo: '' };
+  const e = ev ? { ...ev } : { id: uid(), title: '', owner: cfg.me, start: date, end: date, allDay: false, st: '12:00', et: '13:00', memo: '' };
   let owner = e.owner;
   openSheet(`
     <div class="sheet-head"><button class="txt-btn" data-act="cancel">취소</button><h2>${isNew ? '새 일정' : '일정 수정'}</h2><button class="txt-btn primary" data-act="save">저장</button></div>
@@ -904,16 +904,23 @@ function openEditor(ev, date, fromDay) {
       <div class="seg" id="f-owner">${['a', 'b', 'both'].map(o => `<button type="button" data-owner="${o}" style="--c:${esc(col(o))}" class="${o === owner ? 'on' : ''}"><i></i><span>${esc(nm(o))}</span></button>`).join('')}</div>
       <div class="form-card ${e.allDay ? 'allday' : ''}" id="f-card">
         <label class="row"><span>종일</span><span class="switch"><input type="checkbox" id="f-allday" ${e.allDay ? 'checked' : ''}><b></b></span></label>
-        <div class="row"><span>시작</span><div class="dt"><input type="date" id="f-sd" value="${esc(e.start)}"><input class="t-only" type="time" id="f-st" value="${esc(e.st || '12:00')}"></div></div>
-        <div class="row"><span>종료</span><div class="dt"><input type="date" id="f-ed" value="${esc(e.end)}"><input class="t-only" type="time" id="f-et" value="${esc(e.et || '13:00')}"></div></div>
+        <div class="event-period"><label>시작 날짜<input class="inp" type="date" id="f-sd" value="${esc(e.start)}"></label><label class="t-only">시작 시간<input class="inp" type="time" step="60" id="f-st" value="${esc(e.st || '12:00')}"></label></div>
+        <div class="event-period"><label>종료 날짜<input class="inp" type="date" id="f-ed" value="${esc(e.end)}"></label><label class="t-only">종료 시간<input class="inp" type="time" step="60" id="f-et" value="${esc(e.et || '13:00')}"></label></div>
       </div>
       <textarea id="f-memo" placeholder="메모 (장소, 예약 정보 등)" maxlength="500">${esc(e.memo)}</textarea>
       ${isNew ? '' : '<button class="danger-btn" data-act="del">이 일정 삭제</button>'}
     </div>`, { type: 'editor', locked: true });
   if (isNew) { try { $('#f-title').focus({ preventScroll: true }); } catch { } }
   const back = () => { if (fromDay) renderDaySheet(selected, false); else closeSheet(); };
+  let followStart = isNew;
   sheet.onchange = ev2 => {
     const t = ev2.target;
+    if (t.id === 'f-ed' || t.id === 'f-et') followStart = false;
+    if (followStart && !$('#f-allday').checked && (t.id === 'f-st' || t.id === 'f-sd') && isDate($('#f-sd').value) && TIME.test($('#f-st').value)) {
+      const [hr, min] = $('#f-st').value.split(':');
+      $('#f-ed').value = addDays($('#f-sd').value, Number(hr) === 23 ? 1 : 0);
+      $('#f-et').value = String((Number(hr)+1)%24).padStart(2,'0')+':'+min;
+    }
     if (t.id === 'f-allday') $('#f-card').classList.toggle('allday', t.checked);
     if (t.id === 'f-sd' || t.id === 'f-ed') {
       const sd = $('#f-sd').value, ed = $('#f-ed').value;
@@ -937,9 +944,9 @@ function openEditor(ev, date, fromDay) {
       const sd = isDate($('#f-sd').value) ? $('#f-sd').value : e.start;
       let ed = isDate($('#f-ed').value) ? $('#f-ed').value : sd;
       if (ed < sd) ed = sd;
-      const st = allDay ? '' : (TIME.test($('#f-st').value) ? $('#f-st').value : '12:00');
-      let et = allDay ? '' : (TIME.test($('#f-et').value) ? $('#f-et').value : st);
-      if (!allDay && sd === ed && et < st) et = st;
+      const st = allDay ? '' : $('#f-st').value, et = allDay ? '' : $('#f-et').value;
+      if (!allDay && (!TIME.test(st) || !TIME.test(et))) { toast('시작 시간과 종료 시간을 입력해 주세요'); return; }
+      if (!allDay && sd === ed && et < st) { toast('종료 시간을 시작 이후로 설정하거나 종료 날짜를 바꿔 주세요'); $('#f-et').focus(); return; }
       put('events/' + e.id, { id: e.id, title, owner, start: sd, end: ed, allDay, st, et, memo: $('#f-memo').value.trim(), by: ev ? ev.by : cfg.me, updated: Date.now() });
       selected = sd;
       const dt = parse(sd); cur = { y: dt.getFullYear(), m: dt.getMonth() };
