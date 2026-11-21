@@ -1,5 +1,5 @@
 // 인터넷이 약하거나 없어도 앱 화면이 바로 열리도록 앱 파일을 저장해 둠 (일정 데이터는 앱이 따로 저장)
-const CACHE = 'couple-cal-v4-event-time';
+const CACHE = 'couple-cal-v5-quick-calendar';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './calendar-tools.js', './bridge-ui.js', './bridge.gs.txt'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));

@@ -915,8 +915,10 @@ function openEditor(ev, date, fromDay) {
   let followStart = isNew;
   sheet.onchange = ev2 => {
     const t = ev2.target;
+    const switchedToTime = t.id === 'f-allday' && !t.checked;
+    if (switchedToTime) followStart = true;
     if (t.id === 'f-ed' || t.id === 'f-et') followStart = false;
-    if (followStart && !$('#f-allday').checked && (t.id === 'f-st' || t.id === 'f-sd') && isDate($('#f-sd').value) && TIME.test($('#f-st').value)) {
+    if (followStart && !$('#f-allday').checked && (switchedToTime || t.id === 'f-st' || t.id === 'f-sd') && isDate($('#f-sd').value) && TIME.test($('#f-st').value)) {
       const [hr, min] = $('#f-st').value.split(':');
       $('#f-ed').value = addDays($('#f-sd').value, Number(hr) === 23 ? 1 : 0);
       $('#f-et').value = String((Number(hr)+1)%24).padStart(2,'0')+':'+min;
@@ -1096,10 +1098,26 @@ function renderSettings() {
     <div class="card"><h3>색깔</h3>
       ${colorLine(me, `${esc(nm(me))} 일정`)}${colorLine(ot, `${esc(nm(ot))} 일정`)}${colorLine('both', '함께 (데이트·여행)')}
     </div>
-    <div class="card"><h3>위젯·당일 알림</h3><p>홈 화면에서 일정을 보고, 캘린더 앱으로 당일 알림을 받아요.</p><div class="pad"><button id="calendar-tools-open" class="secondary-btn" type="button">위젯·당일 알림 설정</button></div></div>
+    <div class="card" id="widget-quick-card"><h3>홈 화면 캘린더 위젯</h3><p>현재 일정을 한 번에 폰 캘린더로 가져오세요. 로그인이나 스크립트는 필요 없어요.</p><div class="pad"><button type="button" class="primary-btn" data-act="quickCalendar">폰 캘린더로 내보내기</button></div><p>파일을 캘린더에 추가한 뒤, 홈 화면 빈 곳을 길게 눌러 <b>${IS_IOS ? '편집 → 위젯 추가(또는 +) → 캘린더' : '위젯 → 캘린더'}</b>를 선택하세요. 위젯은 처음 한 번만 배치하면 돼요.</p><p>제목·시간·메모가 담긴 복사본이에요. 이후 변경은 자동 반영되지 않아요.</p><div class="pad"><button id="calendar-tools-open" class="link-btn" type="button">자동 동기화·알림 설정</button></div></div>
     <div class="card"><h3>백업</h3><div class="pad"><div class="btn-row"><button class="ghost-btn" data-act="export">백업 파일 저장</button><button class="ghost-btn" data-act="import">불러오기</button></div><button class="secondary-btn" data-act="recoveryCopy">같은 사람 복구 코드 복사</button><button class="secondary-btn" data-act="recoveryOpen">복구 코드 불러오기</button>${safetySnapshot() ? '<button class="link-btn" data-act="safety">이 폰의 안전 백업 복구</button>' : ''}</div></div>
     ${isStandalone() ? '' : (IS_IOS ? `<div class="card"><h3>아이폰 홈 화면에 설치</h3><p>Safari와 홈 화면 앱은 저장 공간이 달라요. 먼저 <b>같은 사람 복구 코드</b>를 복사한 다음 Safari 공유(또는 ··· → 공유) → “홈 화면에 추가” → “웹 앱으로 열기” 켜기 →  순서로 진행하세요. 홈 화면 앱의 첫 화면에서 복구 코드를 붙여넣으면 달력과 내 역할이 이어져요.</p><div class="pad"><button class="primary-btn" data-act="recoveryCopy">복구 코드 복사하고 설치 준비</button></div></div>` : `<div class="card"><h3>폰에 설치</h3><p>브라우저 메뉴(⋮) → "홈 화면에 추가" 또는 "앱 설치"</p></div>`)}
     <p class="foot">나와 상대가 바뀌어 보이나요? <button data-act="swap">바꾸기</button></p>`;
+}
+async function quickCalendarExport() {
+  const events = Object.values(db.events);
+  if (!events.length) return toast('먼저 일정을 하나 등록해 주세요');
+  if (!window.UriTools) return toast('인터넷에 연결한 뒤 달력을 다시 열어 주세요');
+  const context = {events, settings:db.settings};
+  try {
+    if (navigator.share && navigator.canShare && typeof File === 'function') {
+      const file = new File([UriTools.buildIcs(context,{}).text], '우리달력-'+todayStr()+'.ics',{type:'text/calendar'});
+      if (navigator.canShare({files:[file]})) {
+        await navigator.share({files:[file]}); return;
+      }
+    }
+  } catch (err) { if (err && err.name === 'AbortError') return; }
+  try { UriTools.downloadIcs(context,{}); toast('받은 .ics 파일을 캘린더에서 가져오세요'); }
+  catch { toast('일정 파일을 만들지 못했어요. 다시 시도해 주세요'); }
 }
 const setBody = $('#setBody');
 setBody.addEventListener('change', e => {
@@ -1114,6 +1132,7 @@ setBody.addEventListener('click', e => {
   if (pick) return openPalette(pick.dataset.pick);
   const a = e.target.closest('[data-act]'); if (!a) return;
   const act = a.dataset.act;
+  if (act === 'quickCalendar') return quickCalendarExport();
   if (act === 'connect') stepConnect(false);
   if (act === 'paste') stepPaste(false);
   if (act === 'invite') shareInvite();
