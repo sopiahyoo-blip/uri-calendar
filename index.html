@@ -1,0 +1,1253 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover,interactive-widget=resizes-content">
+<meta name="theme-color" content="#ffffff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="우리달력">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<title>우리 달력</title>
+<style>
+:root{
+  --a:#4F8EF7; --b:#F2709C; --both:#8E6CF0;
+  --bg:#fff; --text:#1d1d1f; --sub:#8a8f98; --line:#eceef1; --soft:#f5f6f8;
+  --red:#e5484d; --blue:#3b7ddd; --green:#30c26b;
+  --tab-h:58px;
+  --safe-b:env(safe-area-inset-bottom,0px); --safe-t:env(safe-area-inset-top,0px);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);overscroll-behavior:none;
+  font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR","Malgun Gothic",sans-serif;
+  -webkit-font-smoothing:antialiased;-webkit-user-select:none;user-select:none;-webkit-text-size-adjust:100%}
+body{position:fixed;inset:0;overflow:hidden}
+input,textarea{-webkit-user-select:text;user-select:text;font:inherit;font-size:16px;color:inherit}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+svg{display:block}
+#app{position:fixed;inset:0;display:flex;flex-direction:column;max-width:560px;margin:0 auto;background:var(--bg)}
+.view{display:none;flex:1;min-height:0;flex-direction:column;padding-top:var(--safe-t);position:relative}
+.view.active{display:flex}
+.scroll{overflow-y:auto;-webkit-overflow-scrolling:touch;flex:1;padding:0 16px 32px}
+
+/* 탭 */
+.tabbar{display:flex;border-top:1px solid var(--line);padding-bottom:var(--safe-b);background:#fff;flex:none}
+.tabbar button{flex:1;height:var(--tab-h);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11px;font-weight:600;color:#b0b4bb}
+.tabbar button.on{color:var(--text)}
+.tabbar svg{width:24px;height:24px}
+
+/* 캘린더 머리 */
+.cal-head{display:flex;align-items:center;gap:2px;padding:8px 10px 2px 14px;flex:none}
+.cal-head h1{font-size:21px;font-weight:800;margin:0 4px;letter-spacing:-.3px;white-space:nowrap}
+.icon-btn{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;color:#5b6068;flex:none}
+.icon-btn:active{background:var(--soft)}
+.icon-btn svg{width:20px;height:20px}
+.spacer{flex:1}
+.today-btn{font-size:13px;font-weight:700;padding:6px 12px;border:1px solid var(--line);border-radius:999px}
+.state-pill{font-size:12px;font-weight:700;padding:5px 10px;border-radius:999px;background:var(--soft);color:#6b7079;margin-right:6px;white-space:nowrap}
+.state-pill.err{background:#fdecec;color:var(--red)}
+.live-dot{display:block;width:8px;height:8px;border-radius:50%;background:var(--green);margin-right:10px}
+.filters{display:flex;gap:6px;padding:6px 14px 8px;overflow-x:auto;flex:none;scrollbar-width:none}
+.filters::-webkit-scrollbar{display:none}
+.chip{display:flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;font-size:13px;font-weight:600;background:var(--soft);white-space:nowrap}
+.chip i{width:9px;height:9px;border-radius:50%;background:var(--c)}
+.chip.off{color:#b0b4bb}
+.chip.off i{background:transparent;box-shadow:inset 0 0 0 1.5px var(--c)}
+.weekdays{display:grid;grid-template-columns:repeat(7,1fr);font-size:11px;font-weight:600;color:var(--sub);text-align:center;padding:2px 0 5px;border-bottom:1px solid var(--line);flex:none}
+.weekdays .sun{color:var(--red)} .weekdays .sat{color:var(--blue)}
+
+/* 달력 칸 */
+.month{flex:1;min-height:0;display:flex;flex-direction:column;touch-action:pan-y}
+.week{flex:1 1 0;min-height:0;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border-bottom:1px solid var(--line);overflow:hidden}
+.cell{grid-row:1/-1;position:relative;text-align:left;padding-top:3px;display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-start;min-width:0}
+.cell .dn{display:inline-grid;place-items:center;min-width:21px;height:21px;margin-left:3px;padding:0 3px;border-radius:11px;font-size:12px;font-weight:600}
+.cell.other{opacity:.35}
+.cell.sun .dn,.cell.hol .dn{color:var(--red)}
+.cell.sat .dn{color:var(--blue)}
+.cell.today .dn{background:var(--text);color:#fff}
+.cell.sel{background:#f2f3f6}
+.cell .mk{position:absolute;top:10px;right:5px;color:#ff5c8a}
+.cell .mk svg{width:8px;height:8px}
+.cell .more{position:absolute;bottom:1px;left:0;right:0;text-align:center;font-size:10px;color:var(--sub);font-weight:700}
+.bar{position:relative;z-index:1;pointer-events:none;margin:0 1px 1px;padding:0 3px;height:16px;line-height:16px;font-size:10.5px;font-weight:600;color:#fff;border-radius:3px;white-space:nowrap;overflow:hidden;min-width:0}
+.bar.cl{border-top-left-radius:0;border-bottom-left-radius:0;margin-left:0}
+.bar.cr{border-top-right-radius:0;border-bottom-right-radius:0;margin-right:0}
+.bar.timed{color:var(--c);background:var(--t)!important}
+.fab{position:absolute;right:18px;bottom:18px;width:56px;height:56px;border-radius:50%;background:var(--text);color:#fff;display:grid;place-items:center;box-shadow:0 6px 18px rgba(0,0,0,.22);z-index:5}
+.fab svg{width:26px;height:26px}
+.fab:active{transform:scale(.95)}
+
+/* 아래에서 올라오는 창 */
+.backdrop{position:fixed;inset:0;background:rgba(0,0,0,.35);opacity:0;pointer-events:none;transition:opacity .2s;z-index:20}
+.backdrop.open{opacity:1;pointer-events:auto}
+.sheet{position:fixed;left:0;right:0;bottom:0;max-width:560px;margin:0 auto;max-height:88vh;max-height:88dvh;background:#fff;border-radius:18px 18px 0 0;z-index:21;transform:translateY(105%);transition:transform .25s cubic-bezier(.2,.8,.2,1);display:flex;flex-direction:column;padding-bottom:var(--safe-b);visibility:hidden}
+.sheet.open{transform:none;visibility:visible}
+.grab{width:38px;height:5px;border-radius:3px;background:#dcdfe3;margin:8px auto 2px;flex:none}
+.sheet-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 12px 10px 16px;flex:none;min-height:48px}
+.sheet-head h2{font-size:17px;margin:0;font-weight:800}
+.sheet-head h2 small{font-size:13px;color:var(--sub);font-weight:600;margin-left:4px}
+.sheet-body{overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 16px 20px}
+.txt-btn{font-size:15px;font-weight:600;color:var(--sub);padding:6px 4px;min-width:40px;text-align:left}
+.txt-btn.primary{color:var(--text);font-weight:800;text-align:right}
+
+/* 첫 화면 */
+.welcome{text-align:center;padding:14px 22px 22px}
+.welcome h2{font-size:23px;margin:10px 0 6px;font-weight:800}
+.welcome>p{color:var(--sub);font-size:14.5px;margin:0 0 18px;line-height:1.55}
+.w-logo svg{width:76px;height:76px;margin:4px auto 0}
+.hint{background:#f4f6fb;border-radius:12px;padding:12px 14px;font-size:13px;color:#4a5070;line-height:1.6;text-align:left;margin-bottom:16px}
+.steps{text-align:left;font-size:14px;line-height:1.75;margin:0 0 16px;padding-left:20px;color:#333}
+.note{font-size:14px;color:#555;line-height:1.55;margin:0 0 14px}
+.paste-row{display:flex;gap:8px;align-items:center}
+.paste-row .full-inp{flex:1;min-width:0}
+
+/* 날짜 창 */
+.tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.tag{font-size:12px;font-weight:700;padding:4px 9px;border-radius:999px;background:var(--soft);color:#555}
+.tag.hol{background:#fdecec;color:var(--red)}
+.tag.anniv,.tag.dday{background:#ffeef4;color:#e04a7b}
+.ev-item{display:flex;align-items:stretch;gap:12px;width:100%;text-align:left;padding:11px 4px;border-bottom:1px solid var(--line)}
+.ev-item:active{background:var(--soft)}
+.ev-item .stripe{width:4px;border-radius:2px;background:var(--c);flex:none}
+.ev-title{font-size:15px;font-weight:700;word-break:break-all}
+.ev-sub{font-size:12.5px;color:var(--sub);margin-top:3px}
+.ev-memo{font-size:12.5px;color:#666;margin-top:4px;white-space:pre-wrap;word-break:break-all}
+.empty{color:var(--sub);text-align:center;font-size:14px;padding:22px 0}
+.add-line{width:100%;margin-top:12px;padding:13px;border-radius:12px;background:var(--soft);font-weight:700;font-size:14px}
+
+/* 입력 */
+.title-input{width:100%;border:0;outline:0;font-size:22px;font-weight:800;padding:6px 0 12px;border-bottom:1px solid var(--line);background:transparent}
+.field-label{font-size:12px;font-weight:700;color:var(--sub);margin:16px 0 8px}
+.seg{display:flex;gap:8px}
+.seg button{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:11px 6px;border-radius:12px;background:var(--soft);font-size:14px;font-weight:700;color:#777;min-width:0}
+.seg button span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.seg button i{width:10px;height:10px;border-radius:50%;background:var(--c);flex:none}
+.seg button.on{background:var(--c,var(--text));color:#fff}
+.seg button.on i{background:#fff}
+.seg.plain button.on{background:var(--text)}
+.form-card{margin-top:16px;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;min-height:50px;border-bottom:1px solid var(--line);font-size:15px}
+.row:last-child{border-bottom:0}
+.row>span:first-child{font-weight:600;flex:none}
+.dt{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+.dt input,.inp{border:0;background:var(--soft);border-radius:8px;padding:7px 9px;outline:0;min-height:36px}
+.allday .t-only{display:none}
+textarea{width:100%;margin-top:16px;min-height:84px;border:1px solid var(--line);border-radius:14px;padding:12px 14px;outline:0;resize:vertical}
+.switch{position:relative;width:48px;height:28px;flex:none}
+.switch input{opacity:0;position:absolute;inset:0;margin:0}
+.switch b{position:absolute;inset:0;border-radius:999px;background:#d9dce1;transition:.2s;pointer-events:none}
+.switch b::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2);transition:.2s}
+.switch input:checked+b{background:var(--text)}
+.switch input:checked+b::after{transform:translateX(20px)}
+.danger-btn{width:100%;margin-top:18px;padding:13px;border-radius:12px;color:var(--red);font-weight:700;background:#fdf0f0}
+.primary-btn{width:100%;margin-top:14px;padding:14px;border-radius:12px;color:#fff;font-weight:800;background:var(--text);font-size:15px}
+.secondary-btn{width:100%;margin-top:10px;padding:14px;border-radius:12px;font-weight:800;background:var(--soft);font-size:15px}
+.ghost-btn{padding:9px 14px;border-radius:10px;background:var(--soft);font-weight:700;font-size:14px;white-space:nowrap;flex:none}
+.link-btn{display:block;margin:14px auto 0;font-size:14px;color:var(--sub);font-weight:600;padding:6px 10px}
+.link-btn.danger{color:var(--red)}
+.full-inp{width:100%;border:1px solid var(--line);background:#fff;border-radius:10px;padding:11px 12px;outline:0;font-size:16px}
+
+/* 페이지 머리 */
+.page-head{display:flex;align-items:center;justify-content:space-between;padding:12px 12px 8px 16px;flex:none}
+.page-head h1{font-size:24px;font-weight:800;margin:0;letter-spacing:-.3px}
+.page-head .icon-btn{width:38px;height:38px;background:var(--soft);color:var(--text)}
+
+/* 디데이 */
+.hero{border-radius:20px;padding:22px 20px;color:#fff;background:linear-gradient(135deg,var(--a),var(--both) 55%,var(--b));margin-top:4px}
+.hero .names{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:700;opacity:.95}
+.hero .names svg{width:16px;height:16px}
+.hero .big{font-size:15px;font-weight:600;margin-top:14px;opacity:.95}
+.hero .big b{font-size:40px;font-weight:800;letter-spacing:-1px;margin:0 2px}
+.hero .since{font-size:12.5px;opacity:.85;margin-top:4px}
+.hero-empty{border:1.5px dashed #d6d9de;border-radius:20px;padding:22px;text-align:center;color:var(--sub);font-size:14px;margin-top:4px;line-height:1.55}
+.hero-empty .ghost-btn{margin-top:12px}
+.sec-title{margin:26px 2px 10px;font-size:15px;font-weight:800}
+.mile{display:flex;gap:8px}
+.mile div{flex:1;min-width:0;padding:12px;border-radius:14px;background:var(--soft)}
+.mile b{display:block;font-size:15px}
+.mile span{display:block;font-size:12px;color:var(--sub);margin-top:3px}
+.mile em{display:block;font-style:normal;font-size:13px;font-weight:800;color:#e04a7b;margin-top:6px}
+.dd-card{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:14px;border-radius:16px;background:var(--soft);margin-bottom:8px}
+.dd-card:active{filter:brightness(.97)}
+.dd-card .t{flex:1;min-width:0}
+.dd-card .t b{display:block;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dd-card .t span{display:block;font-size:12px;color:var(--sub);margin-top:3px}
+.dd-badge{font-size:18px;font-weight:800;letter-spacing:-.3px;white-space:nowrap}
+.dd-badge.soon{color:#e04a7b}
+.dd-badge.past{color:#b0b4bb}
+
+/* 설정 */
+.card{border:1px solid var(--line);border-radius:16px;margin-top:14px;overflow:hidden}
+.card h3{font-size:13px;color:var(--sub);margin:0;padding:14px 14px 4px;font-weight:700}
+.card .row input.inp{text-align:right;max-width:58%}
+.card p{font-size:13px;color:#666;line-height:1.55;margin:2px 14px 10px}
+.card .pad{padding:2px 14px 14px}
+.share-state{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:800;padding:6px 14px 8px}
+.share-state .dot{width:9px;height:9px;border-radius:50%;background:#c4c8ce;flex:none}
+.share-state .dot.on{background:var(--green)}
+.share-state .dot.err{background:var(--red)}
+.share-state .dot.wait{background:#f5a623}
+.color-line{display:flex;align-items:center;justify-content:space-between;width:100%;padding:11px 14px;border-bottom:1px solid var(--line);font-size:15px;font-weight:600;text-align:left}
+.color-line:last-child{border-bottom:0}
+.color-line i{width:26px;height:26px;border-radius:50%;background:var(--c);flex:none}
+.palette{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;padding:6px 10px 8px;justify-items:center}
+.sw{width:46px;height:46px;border-radius:50%;background:var(--c)}
+.sw.on{box-shadow:0 0 0 3px #fff,0 0 0 5px var(--c)}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap}
+.foot{font-size:12.5px;color:#a3a8b0;text-align:center;margin:20px 0 0}
+.foot button{color:#6b7079;font-weight:700;text-decoration:underline;font-size:12.5px}
+.toast{position:fixed;left:50%;bottom:calc(var(--tab-h) + var(--safe-b) + 84px);transform:translate(-50%,10px);background:rgba(29,29,31,.92);color:#fff;font-size:14px;font-weight:600;padding:10px 16px;border-radius:999px;opacity:0;pointer-events:none;transition:.2s;z-index:40;white-space:nowrap;max-width:90vw;overflow:hidden;text-overflow:ellipsis}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- 캘린더 -->
+  <section id="view-cal" class="view active">
+    <header class="cal-head">
+      <button class="icon-btn" id="prevM" aria-label="이전 달"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <h1 id="monthTitle"></h1>
+      <button class="icon-btn" id="nextM" aria-label="다음 달"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
+      <div class="spacer"></div>
+      <div id="shareState"></div>
+      <button class="today-btn" id="todayBtn">오늘</button>
+    </header>
+    <div class="filters" id="filters"></div>
+    <div class="weekdays"><span class="sun">일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span class="sat">토</span></div>
+    <div class="month" id="month"></div>
+    <button class="fab" id="fab" aria-label="일정 추가"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+  </section>
+
+  <!-- 디데이 -->
+  <section id="view-dday" class="view">
+    <header class="page-head"><h1>디데이</h1><button class="icon-btn" id="ddayAdd" aria-label="디데이 추가"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button></header>
+    <div class="scroll" id="ddayBody"></div>
+  </section>
+
+  <!-- 설정 -->
+  <section id="view-set" class="view">
+    <header class="page-head"><h1>설정</h1></header>
+    <div class="scroll" id="setBody"></div>
+  </section>
+
+  <nav class="tabbar" id="tabbar">
+    <button data-tab="cal" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>캘린더</button>
+    <button data-tab="dday"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.2a4.3 4.3 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z"/></svg>디데이</button>
+    <button data-tab="set"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>설정</button>
+  </nav>
+</div>
+<div class="backdrop" id="backdrop"></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true"></div>
+<div class="toast" id="toast"></div>
+<input type="file" id="importFile" accept="application/json,.json" hidden>
+
+<script>
+'use strict';
+/* 선택: 공유에 쓸 Firebase 주소를 여기에 넣어 두면 "처음 시작" 때 주소를 묻지 않아요.
+   예) const FIREBASE_URL = 'https://our-calendar-default-rtdb.asia-southeast1.firebasedatabase.app'; */
+const FIREBASE_URL = 'https://uri-calendar-a00dc-default-rtdb.asia-southeast1.firebasedatabase.app';
+
+/* ---------- 유틸 ---------- */
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const pad = n => String(n).padStart(2, '0');
+const ymd = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const parse = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+const addDays = (s, n) => { const d = parse(s); d.setDate(d.getDate() + n); return ymd(d); };
+const dayNum = s => { const [y, m, d] = s.split('-').map(Number); return Math.round(Date.UTC(y, m - 1, d) / 864e5); };
+const diff = (a, b) => dayNum(b) - dayNum(a); // b - a (일)
+const todayStr = () => ymd(new Date());
+const WD = ['일', '월', '화', '수', '목', '금', '토'];
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const HEX = /^#[0-9a-fA-F]{6}$/;
+const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+const BAD_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+const okId = k => typeof k === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(k) && !BAD_KEYS.has(k);
+const isObj = v => !!v && typeof v === 'object' && !Array.isArray(v);
+const str = (v, max) => typeof v === 'string' ? v.trim().slice(0, max) : '';
+function isDate(s) {
+  if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const [y, m, d] = s.split('-').map(Number);
+  if (y < 1900 || y > 2200) return false;
+  const dt = new Date(y, m - 1, d);
+  return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d;
+}
+function validDbUrl(u) { return typeof u === 'string' && /^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)*\.(firebaseio\.com|firebasedatabase\.app)\/?$/i.test(u.trim()); }
+const fmtDot = s => s.replace(/-/g, '.');
+const fmtMD = s => { const d = parse(s); return `${d.getMonth() + 1}/${d.getDate()}`; };
+// 매년 같은 날. 2월 29일은 평년에 2월 28일로 셈
+function yearlyOn(y, mmdd) { const m = +mmdd.slice(0, 2), d = +mmdd.slice(3, 5); return `${y}-${pad(m)}-${pad(Math.min(d, new Date(y, m, 0).getDate()))}`; }
+
+const HEART = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-8-4.9-8-11a4.6 4.6 0 0 1 8-2.9A4.6 4.6 0 0 1 20 10c0 6.1-8 11-8 11z"/></svg>';
+const CLOSE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+const VENN = '<svg viewBox="0 0 100 100" aria-hidden="true"><defs><clipPath id="vclip"><circle cx="39.5" cy="50" r="21"/></clipPath></defs><circle cx="39.5" cy="50" r="21" style="fill:var(--a)"/><circle cx="60.5" cy="50" r="21" style="fill:var(--b)"/><circle cx="60.5" cy="50" r="21" style="fill:var(--both)" clip-path="url(#vclip)"/></svg>';
+const PALETTE = ['#4F8EF7', '#2EB5C9', '#34C38F', '#F5A623', '#FF7A45', '#E5484D', '#F2709C', '#8E6CF0'];
+
+/* 한국 공휴일 (2025~2027, 우주항공청 월력요항 기준) */
+const HOLIDAYS = {
+  '2025-01-01': '신정', '2025-01-27': '임시공휴일', '2025-01-28': '설날 연휴', '2025-01-29': '설날', '2025-01-30': '설날 연휴',
+  '2025-03-01': '삼일절', '2025-03-03': '대체공휴일', '2025-05-05': '어린이날·부처님오신날', '2025-05-06': '대체공휴일',
+  '2025-06-03': '대통령선거', '2025-06-06': '현충일', '2025-08-15': '광복절', '2025-10-03': '개천절', '2025-10-05': '추석 연휴',
+  '2025-10-06': '추석', '2025-10-07': '추석 연휴', '2025-10-08': '대체공휴일', '2025-10-09': '한글날', '2025-12-25': '성탄절',
+  '2026-01-01': '신정', '2026-02-16': '설날 연휴', '2026-02-17': '설날', '2026-02-18': '설날 연휴', '2026-03-01': '삼일절',
+  '2026-03-02': '대체공휴일', '2026-05-01': '노동절', '2026-05-05': '어린이날', '2026-05-24': '부처님오신날', '2026-05-25': '대체공휴일',
+  '2026-06-03': '지방선거', '2026-06-06': '현충일', '2026-07-17': '제헌절', '2026-08-15': '광복절', '2026-08-17': '대체공휴일',
+  '2026-09-24': '추석 연휴', '2026-09-25': '추석', '2026-09-26': '추석 연휴', '2026-10-03': '개천절', '2026-10-05': '대체공휴일',
+  '2026-10-09': '한글날', '2026-12-25': '성탄절',
+  '2027-01-01': '신정', '2027-02-06': '설날 연휴', '2027-02-07': '설날', '2027-02-08': '설날 연휴', '2027-02-09': '대체공휴일',
+  '2027-03-01': '삼일절', '2027-05-01': '노동절', '2027-05-03': '대체공휴일', '2027-05-05': '어린이날', '2027-05-13': '부처님오신날',
+  '2027-06-06': '현충일', '2027-07-17': '제헌절', '2027-07-19': '대체공휴일', '2027-08-15': '광복절', '2027-08-16': '대체공휴일',
+  '2027-09-14': '추석 연휴', '2027-09-15': '추석', '2027-09-16': '추석 연휴', '2027-10-03': '개천절', '2027-10-04': '대체공휴일',
+  '2027-10-09': '한글날', '2027-10-11': '대체공휴일', '2027-12-25': '성탄절', '2027-12-27': '대체공휴일'
+};
+
+/* ---------- 실행 환경 ---------- */
+const UA = navigator.userAgent || '';
+const IS_IOS = /iPhone|iPad|iPod/.test(UA) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const IS_KAKAO = /KAKAOTALK/i.test(UA);
+const IN_APP = IS_KAKAO || /Instagram|FBAN|FBAV|Line\/|NAVER\(inapp|DaumApps|everytimeApp/i.test(UA);
+const isStandalone = () => navigator.standalone === true || (!!window.matchMedia && matchMedia('(display-mode: standalone)').matches);
+
+/* ---------- 데이터 ---------- */
+const LS = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { toast('폰 저장 공간이 부족해요'); } }
+};
+const DEFAULT_SETTINGS = { nameA: '', nameB: '', start: '', colorA: '#4F8EF7', colorB: '#F2709C', colorBoth: '#8E6CF0' };
+function cleanSettings(s) {
+  s = isObj(s) ? s : {};
+  const o = { nameA: str(s.nameA, 20), nameB: str(s.nameB, 20), start: isDate(s.start) ? s.start : '' };
+  for (const k of ['colorA', 'colorB', 'colorBoth']) o[k] = HEX.test(s[k]) ? s[k] : DEFAULT_SETTINGS[k];
+  return o;
+}
+function cleanEvent(id, e) {
+  if (!okId(id) || !isObj(e) || !isDate(e.start)) return null;
+  const st = TIME.test(e.st) ? e.st : '';
+  const allDay = e.allDay !== false || !st;
+  const end = isDate(e.end) && e.end >= e.start ? e.end : e.start;
+  let et = TIME.test(e.et) ? e.et : st;
+  if (!allDay && end === e.start && et < st) et = st;
+  return {
+    id, title: str(e.title, 60) || '(제목 없음)', owner: ['a', 'b', 'both'].includes(e.owner) ? e.owner : 'a',
+    start: e.start, end, allDay, st: allDay ? '' : st, et: allDay ? '' : et, memo: str(e.memo, 500),
+    by: e.by === 'b' ? 'b' : 'a', updated: Number.isFinite(e.updated) ? e.updated : 0
+  };
+}
+function cleanDday(id, x) {
+  if (!okId(id) || !isObj(x) || !isDate(x.date)) return null;
+  return { id, title: str(x.title, 40) || '디데이', date: x.date, mode: ['until', 'yearly', 'since'].includes(x.mode) ? x.mode : 'until', updated: Number.isFinite(x.updated) ? x.updated : 0 };
+}
+// 서버나 백업에서 온 데이터는 항상 이 함수로 걸러서 씀 (모양이 이상한 값은 버림)
+function normalize(d) {
+  d = isObj(d) ? d : {};
+  const out = { settings: cleanSettings(d.settings), events: {}, ddays: {}, members: {} };
+  const ev = d.events && typeof d.events === 'object' ? d.events : {};
+  for (const k of Object.keys(ev)) { const e = cleanEvent(k, ev[k]); if (e) out.events[k] = e; }
+  const dd = d.ddays && typeof d.ddays === 'object' ? d.ddays : {};
+  for (const k of Object.keys(dd)) { const x = cleanDday(k, dd[k]); if (x) out.ddays[k] = x; }
+  if (isObj(d.members)) for (const k of ['a', 'b']) if (Number.isFinite(d.members[k])) out.members[k] = d.members[k];
+  return out;
+}
+const QUEUE_PATH = /^(settings(\/(nameA|nameB|start|colorA|colorB|colorBoth))?|events\/[A-Za-z0-9_-]{1,64}|ddays\/[A-Za-z0-9_-]{1,64}|members\/[ab])$/;
+
+let db = normalize(LS.get('cc_data', null));   // 둘이 함께 쓰는 데이터
+let cfg = (() => {                             // 이 폰에만 저장하는 설정
+  const o = isObj(LS.get('cc_cfg', null)) ? LS.get('cc_cfg', null) : {};
+  const code = typeof o.code === 'string' && /^[a-z0-9]{12,40}$/.test(o.code) ? o.code : '';
+  return {
+    me: o.me === 'b' ? 'b' : 'a',
+    dbUrl: validDbUrl(o.dbUrl) ? o.dbUrl.trim().replace(/\/+$/, '') : '',
+    code,
+    host: o.host === true,                          // 이 폰이 공유를 처음 만든 폰인지
+    everShared: o.everShared === true || !!code      // 한 번이라도 공유에 연결된 적 있는지
+  };
+})();
+let queue = (() => { const q = LS.get('cc_queue', []); return Array.isArray(q) ? q.filter(x => x && typeof x.p === 'string' && QUEUE_PATH.test(x.p)) : []; })();
+let hiddenOwners = (() => { const h = LS.get('cc_filter', {}) || {}; return { a: !!h.a, b: !!h.b, both: !!h.both }; })();
+const saveDb = () => LS.set('cc_data', db);
+const saveCfg = () => LS.set('cc_cfg', cfg);
+const saveQueue = () => LS.set('cc_queue', queue);
+
+const S = () => db.settings;
+const other = () => cfg.me === 'a' ? 'b' : 'a';
+const nameKey = o => o === 'a' ? 'nameA' : 'nameB';
+const colorKey = o => o === 'a' ? 'colorA' : o === 'b' ? 'colorB' : 'colorBoth';
+const nm = o => o === 'both' ? '함께' : (S()[nameKey(o)] || (o === 'a' ? 'A' : 'B'));
+const col = o => S()[colorKey(o)];
+
+function setPath(obj, path, value) {
+  const parts = path.split('/').filter(Boolean);
+  if (!parts.length || parts.some(p => BAD_KEYS.has(p))) return;
+  let o = obj;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const k = parts[i];
+    if (!Object.prototype.hasOwnProperty.call(o, k) || !o[k] || typeof o[k] !== 'object') o[k] = {};
+    o = o[k];
+  }
+  const k = parts[parts.length - 1];
+  if (value === null || value === undefined) delete o[k]; else o[k] = value;
+}
+
+/* 내 변경: 폰에 저장 → (공유 중이면) 서버로 보냄 */
+function commit(ops) {
+  for (const [p, v] of ops) setPath(db, p, v);
+  db = normalize(db);
+  saveDb();
+  if (syncOn()) {
+    for (const [p, v] of ops) { queue = queue.filter(q => q.p !== p); queue.push({ p, v: v ?? null }); }
+    saveQueue();
+    flush();
+  }
+  renderAll();
+}
+const put = (p, v) => commit([[p, v]]);
+
+/* ---------- 동기화 (Firebase Realtime Database) ---------- */
+let es = null, syncState = 'off', syncMsg = '', flushing = false, retryTimer = null, hiddenAt = 0, lastBeat = 0, lastTry = 0, announced = false, writeDenied = false;
+const DENIED_MSG = '데이터베이스 규칙에서 저장을 막고 있어요';
+const syncOn = () => !!(cfg.dbUrl && cfg.code);
+const base = () => cfg.dbUrl + '/couples/' + cfg.code;
+
+function setSync(state, msg = '') {
+  syncState = state; syncMsg = msg;
+  renderStatus();
+  if (curTab === 'set') renderSettings();
+}
+
+function connect(silent) {
+  if (es) { es.close(); es = null; }
+  if (!syncOn()) { setSync('off'); return; }
+  if (!silent || syncState !== 'on') setSync('connecting');
+  lastTry = Date.now();
+  let src;
+  try { src = new EventSource(base() + '.json'); } catch { setSync('error', '공유 주소를 확인해 주세요'); return; }
+  es = src; lastBeat = Date.now();
+  const beat = () => { lastBeat = Date.now(); };
+  src.addEventListener('keep-alive', beat);
+  src.addEventListener('put', ev => {
+    if (es !== src) return;
+    beat();
+    let m; try { m = JSON.parse(ev.data); } catch { return; }
+    if (!m || typeof m.path !== 'string') return;
+    applyRemote(m.path, m.data);
+    if (m.path === '/') { if (writeDenied) setSync('error', DENIED_MSG); else setSync('on'); announce(); flush(); }
+    scheduleRender();
+  });
+  src.addEventListener('patch', ev => {
+    if (es !== src) return;
+    beat();
+    let m; try { m = JSON.parse(ev.data); } catch { return; }
+    if (!m || typeof m.path !== 'string' || !isObj(m.data)) return;
+    for (const k of Object.keys(m.data)) applyRemote(m.path.replace(/\/$/, '') + '/' + k, m.data[k]);
+    scheduleRender();
+  });
+  src.addEventListener('cancel', () => { if (es !== src) return; src.close(); es = null; setSync('error', '데이터베이스 규칙에서 읽기를 막고 있어요'); });
+  src.addEventListener('auth_revoked', () => { if (es !== src) return; src.close(); es = null; setSync('error', '권한이 만료됐어요'); });
+  src.onerror = () => {
+    if (es !== src) return;
+    if (src.readyState === 2) {
+      es = null;
+      setSync(navigator.onLine ? 'error' : 'offline', navigator.onLine ? '공유 주소나 데이터베이스 규칙을 확인해 주세요' : '');
+      setTimeout(() => { if (!es && syncOn()) connect(true); }, 10000);
+    } else if (syncState !== 'error') setSync('offline');
+  };
+}
+
+function applyRemote(path, data) {
+  const parts = path.split('/').filter(Boolean);
+  if (!parts.length) {
+    const empty = !isObj(data) || (!data.settings && !data.events && !data.ddays);
+    if (empty) { db.members = {}; enqueueAll(cfg.host); }  // 서버가 비어 있으면 이 폰 데이터를 올림 (지우지 않음). 설정은 공유를 만든 폰만 올림
+    else db = normalize(data);
+  } else {
+    setPath(db, parts.join('/'), data);
+  }
+  for (const q of queue) setPath(db, q.p, q.v); // 아직 못 보낸 내 변경은 그대로 보여줌
+  db = normalize(db);
+  saveDb();
+}
+
+function enqueueAll(withSettings) {
+  const ops = [];
+  if (withSettings) ops.push({ p: 'settings', v: db.settings });
+  for (const [id, e] of Object.entries(db.events)) ops.push({ p: 'events/' + id, v: e });
+  for (const [id, d] of Object.entries(db.ddays)) ops.push({ p: 'ddays/' + id, v: d });
+  for (const op of ops) { queue = queue.filter(q => q.p !== op.p); queue.push(op); }
+  saveQueue();
+}
+
+async function flush() {
+  if (flushing || !syncOn() || !queue.length) return;
+  flushing = true;
+  let retry = false;
+  try {
+    while (queue.length && syncOn()) {
+      const q = queue[0];
+      let res;
+      try {
+        res = await fetch(`${base()}/${q.p}.json`, { method: q.v === null ? 'DELETE' : 'PUT', body: q.v === null ? undefined : JSON.stringify(q.v) });
+      } catch { retry = true; if (syncState === 'on') setSync('offline'); break; }
+      if (res.status === 401 || res.status === 403) { writeDenied = true; setSync('error', DENIED_MSG); retry = true; break; }
+      if (res.ok && writeDenied) { writeDenied = false; if (es && es.readyState === 1) setSync('on'); }
+      if (res.ok || (res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 429)) {
+        if (!res.ok) toast('저장하지 못한 변경이 하나 있어요');   // 다시 보내도 안 되는 요청은 버림
+        queue = queue.filter(x => x !== q);
+        saveQueue();
+        continue;
+      }
+      retry = true; break;            // 서버 오류(5xx 등)는 잠시 뒤 다시 보냄
+    }
+  } finally {
+    flushing = false;
+    if (retry) { clearTimeout(retryTimer); retryTimer = setTimeout(flush, 15000); }
+    if (curTab === 'set') renderSettings();
+  }
+}
+
+// 상대가 연결했는지 알 수 있게 내 접속 시간을 남김
+function announce() {
+  if (announced) return;
+  announced = true;
+  put('members/' + cfg.me, Date.now());
+}
+
+window.addEventListener('online', () => { if (syncOn()) { connect(true); flush(); } });
+window.addEventListener('offline', () => { if (syncOn()) setSync('offline'); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { hiddenAt = Date.now(); return; }
+  renderAll();
+  if (syncOn()) {
+    // 앱을 내려뒀다 다시 열면 연결이 끊겨 있을 수 있어 새로 연결
+    if (!es || es.readyState !== 1 || Date.now() - hiddenAt > 30000 || Date.now() - lastBeat > 35000) connect(true);
+    flush();
+  }
+});
+// 연결이 조용히 죽은 경우 대비: 90초 넘게 아무 신호가 없으면 다시 연결
+setInterval(() => {
+  if (!syncOn() || document.hidden) return;
+  if (es && es.readyState === 1 && Date.now() - lastBeat > 90000) connect(true);
+  if (!es && syncState === 'error' && Date.now() - lastTry > 30000) connect(true); // 규칙을 고친 뒤 저절로 다시 연결
+  if (queue.length && !flushing) flush();
+}, 20000);
+
+/* ---------- 초대 링크 ---------- */
+const b64u = s => btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const appUrl = () => location.origin + location.pathname;
+const makeToken = () => b64u(JSON.stringify({ u: cfg.dbUrl, c: cfg.code, p: other() }));
+const inviteLink = token => appUrl() + '#join=' + (token || makeToken());
+function readToken(text) {
+  try {
+    const s = String(text || '').trim();
+    const m = s.match(/join=([A-Za-z0-9_-]+)/);
+    let t = m ? m[1] : (/^[A-Za-z0-9_-]{20,}$/.test(s) ? s : '');
+    if (!t) return null;
+    t = t.replace(/-/g, '+').replace(/_/g, '/');
+    while (t.length % 4) t += '=';
+    const o = JSON.parse(atob(t));
+    if (!isObj(o) || !validDbUrl(o.u) || typeof o.c !== 'string' || !/^[a-z0-9]{12,40}$/.test(o.c)) return null;
+    return { u: o.u.trim().replace(/\/+$/, ''), c: o.c, p: o.p === 'a' ? 'a' : 'b' };
+  } catch { return null; }
+}
+function newCode() { const a = new Uint8Array(16); crypto.getRandomValues(a); return [...a].map(b => 'abcdefghijkmnpqrstuvwxyz23456789'[b % 32]).join(''); }
+function startShare(url) {
+  if (syncOn()) return;
+  cfg.dbUrl = url.trim().replace(/\/+$/, '');
+  cfg.code = newCode();
+  cfg.host = true; cfg.everShared = true;
+  saveCfg();
+  db.members = {}; saveDb();
+  queue = [];
+  enqueueAll(true);
+  announced = false;
+  connect(); flush();
+  renderAll();
+}
+function joinWith(o) {
+  // 혼자 쓰던 일정만 새 달력으로 가져감. 다른 사람과 함께 보던 달력의 일정은 가져가지 않음
+  const bringMine = !cfg.everShared || !db.members[other()];
+  queue = [];
+  if (bringMine) {
+    if (o.p !== cfg.me) {            // 내 역할이 바뀌면 내 일정의 주인 표시도 함께 바꿈
+      for (const e of Object.values(db.events)) {
+        if (e.owner !== 'both') e.owner = e.owner === 'a' ? 'b' : 'a';
+        e.by = e.by === 'a' ? 'b' : 'a';
+      }
+    }
+    db.members = {};
+  } else {
+    db = normalize({});
+  }
+  saveDb();
+  cfg = { ...cfg, dbUrl: o.u, code: o.c, me: o.p, host: false, everShared: true };
+  saveCfg();
+  if (bringMine) enqueueAll(false);
+  saveQueue();
+  announced = false;
+  connect();
+  renderAll();
+}
+async function shareInvite() {
+  const url = inviteLink();
+  if (navigator.share) {
+    try { await navigator.share({ title: '우리 달력', text: `${nm(cfg.me)}님이 우리 달력에 초대했어요`, url }); return; }
+    catch (e) { if (e && e.name === 'AbortError') return; }
+  }
+  copyText(url);
+}
+async function copyText(t) {
+  try { await navigator.clipboard.writeText(t); toast('복사했어요'); }
+  catch { prompt('아래 내용을 복사하세요', t); }
+}
+async function pasteInto(input) {
+  try { const t = await navigator.clipboard.readText(); if (t) { input.value = t.trim(); return; } } catch { }
+  toast('입력칸을 길게 눌러 붙여넣어 주세요'); input.focus();
+}
+
+/* ---------- 화면 상태 ---------- */
+let curTab = 'cal';
+const now0 = new Date();
+let cur = { y: now0.getFullYear(), m: now0.getMonth() };
+let selected = todayStr();
+let renderQueued = false;
+function scheduleRender() { if (renderQueued) return; renderQueued = true; requestAnimationFrame(() => { renderQueued = false; renderAll(); }); }
+function applyColors() {
+  const r = document.documentElement.style;
+  r.setProperty('--a', col('a')); r.setProperty('--b', col('b')); r.setProperty('--both', col('both'));
+}
+function renderAll() {
+  applyColors();
+  renderStatus();
+  renderCalendar();
+  if (curTab === 'dday') renderDday();
+  if (curTab === 'set') renderSettings();
+  if (sheetCtx && sheetCtx.type === 'day') renderDaySheet(sheetCtx.date, true);
+}
+function renderStatus() {
+  const el = $('#shareState');
+  el.innerHTML = syncState === 'off' ? '<button class="state-pill" data-goto="set">혼자 보는 중</button>'
+    : syncState === 'error' ? '<button class="state-pill err" data-goto="set">연결 오류</button>'
+    : syncState === 'offline' ? '<span class="state-pill">오프라인</span>'
+    : syncState === 'on' ? '<span class="live-dot" title="공유 연결됨"></span>' : '';
+}
+$('#shareState').addEventListener('click', e => { if (e.target.closest('[data-goto]')) switchTab('set'); });
+
+/* ---------- 일정 조회 ---------- */
+const allEvents = () => Object.values(db.events);
+const visibleEvents = () => allEvents().filter(e => !hiddenOwners[e.owner]);
+function evSort(a, b) {
+  if (a.start !== b.start) return a.start < b.start ? -1 : 1;
+  const la = diff(a.start, a.end), lb = diff(b.start, b.end);
+  if (la !== lb) return lb - la;
+  if (a.allDay !== b.allDay) return a.allDay ? -1 : 1;
+  return a.st < b.st ? -1 : a.st > b.st ? 1 : 0;
+}
+const eventsOn = date => visibleEvents().filter(e => e.start <= date && e.end >= date).sort((a, b) => {
+  const am = a.start !== a.end, bm = b.start !== b.end;
+  if (am !== bm) return am ? -1 : 1;
+  if (a.allDay !== b.allDay) return a.allDay ? -1 : 1;
+  return a.st < b.st ? -1 : a.st > b.st ? 1 : 0;
+});
+function markersOn(date) {
+  const out = [];
+  if (HOLIDAYS[date]) out.push({ kind: 'hol', label: HOLIDAYS[date] });
+  const s = S().start, y = +date.slice(0, 4);
+  if (s && date > s) {
+    const n = diff(s, date) + 1;
+    if (n % 100 === 0) out.push({ kind: 'anniv', label: `${n}일` });
+    if (y > +s.slice(0, 4) && date === yearlyOn(y, s.slice(5))) out.push({ kind: 'anniv', label: `${y - +s.slice(0, 4)}주년` });
+  }
+  for (const x of Object.values(db.ddays)) {
+    const hit = x.mode === 'yearly' ? (date >= x.date && date === yearlyOn(y, x.date.slice(5))) : date === x.date;
+    if (hit) out.push({ kind: 'dday', label: x.title });
+  }
+  return out;
+}
+
+/* ---------- 캘린더 ---------- */
+const monthEl = $('#month');
+function renderCalendar() {
+  $('#monthTitle').textContent = `${cur.y}년 ${cur.m + 1}월`;
+  $('#filters').innerHTML = ['a', 'b', 'both'].map(o =>
+    `<button class="chip ${hiddenOwners[o] ? 'off' : ''}" data-owner="${o}" style="--c:${esc(col(o))}"><i></i>${esc(nm(o))}${o === cfg.me ? ' (나)' : ''}</button>`).join('');
+  const first = new Date(cur.y, cur.m, 1);
+  const off = first.getDay();
+  const dim = new Date(cur.y, cur.m + 1, 0).getDate();
+  const weeks = Math.ceil((off + dim) / 7);
+  const gridStart = ymd(new Date(cur.y, cur.m, 1 - off));
+  const h = monthEl.clientHeight;
+  const rowH = h ? h / weeks : 90;
+  const lanes = Math.max(1, Math.floor((rowH - 24 - 13) / 17));
+  const today = todayStr();
+  const evs = visibleEvents().sort(evSort);
+  let html = '';
+  for (let w = 0; w < weeks; w++) {
+    const ws = addDays(gridStart, w * 7), we = addDays(ws, 6);
+    const occ = [];
+    const hiddenCnt = Array(7).fill(0);
+    let bars = '';
+    for (const e of evs) {
+      if (e.start > we || e.end < ws) continue;
+      const s = Math.max(0, diff(ws, e.start)), en = Math.min(6, diff(ws, e.end));
+      let lane = 0;
+      while (occ[lane] && occ[lane].slice(s, en + 1).some(Boolean)) lane++;
+      if (!occ[lane]) occ[lane] = Array(7).fill(false);
+      for (let i = s; i <= en; i++) occ[lane][i] = true;
+      if (lane >= lanes) { for (let i = s; i <= en; i++) hiddenCnt[i]++; continue; }
+      const c = esc(col(e.owner));
+      const multi = e.start !== e.end;
+      const cls = ['bar', e.start < ws ? 'cl' : '', e.end > we ? 'cr' : '', !e.allDay && !multi ? 'timed' : ''].join(' ');
+      bars += `<div class="${cls}" style="grid-column:${s + 1}/${en + 2};grid-row:${lane + 2};background:${c};--c:${c};--t:${c}22">${esc(e.title)}</div>`;
+    }
+    let cells = '';
+    for (let i = 0; i < 7; i++) {
+      const d = addDays(ws, i), dt = parse(d), mk = markersOn(d);
+      const cls = ['cell', dt.getMonth() !== cur.m ? 'other' : '', i === 0 ? 'sun' : '', i === 6 ? 'sat' : '',
+        HOLIDAYS[d] ? 'hol' : '', d === today ? 'today' : '', d === selected ? 'sel' : ''].join(' ');
+      cells += `<button class="${cls}" style="grid-column:${i + 1}" data-date="${d}" aria-label="${d}"><span class="dn">${dt.getDate()}</span>` +
+        (mk.some(m => m.kind !== 'hol') ? `<span class="mk">${HEART}</span>` : '') +
+        (hiddenCnt[i] ? `<span class="more">+${hiddenCnt[i]}</span>` : '') + '</button>';
+    }
+    html += `<div class="week" style="grid-template-rows:24px repeat(${lanes},17px) minmax(13px,1fr)">${cells}${bars}</div>`;
+  }
+  monthEl.innerHTML = html;
+}
+$('#filters').addEventListener('click', e => {
+  const b = e.target.closest('[data-owner]'); if (!b) return;
+  hiddenOwners[b.dataset.owner] = !hiddenOwners[b.dataset.owner];
+  LS.set('cc_filter', hiddenOwners);
+  renderCalendar();
+});
+monthEl.addEventListener('click', e => {
+  if (swiped) return;
+  const c = e.target.closest('[data-date]'); if (!c) return;
+  const d = c.dataset.date, dt = parse(d);
+  cur = { y: dt.getFullYear(), m: dt.getMonth() };
+  selected = d;
+  renderCalendar();
+  renderDaySheet(d, false);
+});
+function moveMonth(n) { const d = new Date(cur.y, cur.m + n, 1); cur = { y: d.getFullYear(), m: d.getMonth() }; renderCalendar(); }
+$('#prevM').onclick = () => moveMonth(-1);
+$('#nextM').onclick = () => moveMonth(1);
+$('#todayBtn').onclick = () => { const t = new Date(); cur = { y: t.getFullYear(), m: t.getMonth() }; selected = todayStr(); renderCalendar(); };
+$('#fab').onclick = () => openEditor(null, selected, false);
+let tx = 0, ty = 0, swiped = false;
+monthEl.addEventListener('touchstart', e => { tx = e.touches[0].clientX; ty = e.touches[0].clientY; swiped = false; }, { passive: true });
+monthEl.addEventListener('touchend', e => {
+  const dx = e.changedTouches[0].clientX - tx, dy = e.changedTouches[0].clientY - ty;
+  if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) { swiped = true; moveMonth(dx < 0 ? 1 : -1); setTimeout(() => { swiped = false; }, 350); }
+}, { passive: true });
+let resizeT; window.addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(renderCalendar, 120); });
+
+/* ---------- 아래에서 올라오는 창 ---------- */
+const sheet = $('#sheet'), backdrop = $('#backdrop');
+let sheetCtx = null, sheetOpen = false, armed = false;
+function openSheet(html, ctx) {
+  sheet.innerHTML = '<div class="grab"></div>' + html;
+  sheet.onclick = null; sheet.onchange = null;
+  sheetCtx = ctx || null;
+  sheet.classList.add('open'); backdrop.classList.add('open');
+  sheetOpen = true;
+  // 뒤로 가기 버튼용 기록은 하나만 만들어 두고 다시 씀
+  if (!armed) { try { history.pushState({ sheet: 1 }, ''); armed = true; } catch { } }
+}
+function closeSheet(fromPop) {
+  sheet.classList.remove('open'); backdrop.classList.remove('open');
+  sheetCtx = null;
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  sheetOpen = false;
+}
+backdrop.onclick = () => { if (sheetCtx && sheetCtx.locked) return; closeSheet(); };
+// 안드로이드 뒤로 가기 버튼: 창이 열려 있으면 닫고, 없으면 원래대로 뒤로 감
+window.addEventListener('popstate', () => {
+  if (!armed) return;
+  armed = false;
+  if (sheetOpen) closeSheet(true);
+  else { try { history.back(); } catch { } }
+});
+// 키보드가 올라오면 창을 키보드 위로 올림 (아이폰)
+if (window.visualViewport) {
+  const vv = window.visualViewport;
+  const fit = () => {
+    const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    sheet.style.bottom = kb > 60 ? kb + 'px' : '';
+    sheet.style.maxHeight = kb > 60 ? (vv.height - 10) + 'px' : '';
+    sheet.style.paddingBottom = kb > 60 ? '0px' : '';
+  };
+  vv.addEventListener('resize', fit);
+  vv.addEventListener('scroll', fit);
+}
+document.addEventListener('focusin', e => {
+  if (sheet.contains(e.target) && e.target.matches('input,textarea')) setTimeout(() => { try { e.target.scrollIntoView({ block: 'nearest' }); } catch { } }, 300);
+});
+document.addEventListener('focusout', () => setTimeout(() => { if (!document.activeElement || document.activeElement === document.body) window.scrollTo(0, 0); }, 80));
+
+/* 날짜 창 */
+function renderDaySheet(date, refresh) {
+  const d = parse(date), evs = eventsOn(date), marks = markersOn(date);
+  const body = `
+    <div class="sheet-head"><h2>${d.getMonth() + 1}월 ${d.getDate()}일<small>${WD[d.getDay()]}요일</small></h2><button class="icon-btn" data-act="close" aria-label="닫기">${CLOSE}</button></div>
+    <div class="sheet-body">
+      ${marks.length ? `<div class="tags">${marks.map(m => `<span class="tag ${m.kind}">${esc(m.label)}</span>`).join('')}</div>` : ''}
+      ${evs.length ? evs.map(evItem).join('') : '<p class="empty">일정이 없어요</p>'}
+      <button class="add-line" data-act="add">+ 이 날에 일정 추가</button>
+    </div>`;
+  if (refresh) sheet.innerHTML = '<div class="grab"></div>' + body;
+  else openSheet(body, { type: 'day', date });
+  sheet.onclick = e => {
+    const a = e.target.closest('[data-act],[data-id]'); if (!a) return;
+    if (a.dataset.act === 'close') closeSheet();
+    else if (a.dataset.act === 'add') openEditor(null, date, true);
+    else if (a.dataset.id && db.events[a.dataset.id]) openEditor(db.events[a.dataset.id], date, true);
+  };
+}
+function evItem(e) {
+  const multi = e.start !== e.end;
+  const when = e.allDay ? (multi ? `${fmtMD(e.start)} ~ ${fmtMD(e.end)} · 종일` : '종일')
+    : (multi ? `${fmtMD(e.start)} ${e.st} ~ ${fmtMD(e.end)} ${e.et}` : `${e.st} ~ ${e.et}`);
+  const c = esc(col(e.owner));
+  return `<button class="ev-item" data-id="${esc(e.id)}" style="--c:${c}"><span class="stripe"></span><div style="min-width:0;flex:1">
+    <div class="ev-title">${esc(e.title)}</div>
+    <div class="ev-sub">${esc(when)} · <b style="color:${c}">${esc(nm(e.owner))}</b></div>
+    ${e.memo ? `<div class="ev-memo">${esc(e.memo)}</div>` : ''}</div></button>`;
+}
+
+/* 일정 만들기·고치기 */
+function openEditor(ev, date, fromDay) {
+  const isNew = !ev;
+  const e = ev ? { ...ev } : { id: uid(), title: '', owner: cfg.me, start: date, end: date, allDay: true, st: '', et: '', memo: '' };
+  let owner = e.owner;
+  openSheet(`
+    <div class="sheet-head"><button class="txt-btn" data-act="cancel">취소</button><h2>${isNew ? '새 일정' : '일정 수정'}</h2><button class="txt-btn primary" data-act="save">저장</button></div>
+    <div class="sheet-body">
+      <input class="title-input" id="f-title" placeholder="제목" maxlength="60" value="${esc(e.title)}" enterkeyhint="done">
+      <div class="field-label">누구 일정?</div>
+      <div class="seg" id="f-owner">${['a', 'b', 'both'].map(o => `<button type="button" data-owner="${o}" style="--c:${esc(col(o))}" class="${o === owner ? 'on' : ''}"><i></i><span>${esc(nm(o))}</span></button>`).join('')}</div>
+      <div class="form-card ${e.allDay ? 'allday' : ''}" id="f-card">
+        <label class="row"><span>종일</span><span class="switch"><input type="checkbox" id="f-allday" ${e.allDay ? 'checked' : ''}><b></b></span></label>
+        <div class="row"><span>시작</span><div class="dt"><input type="date" id="f-sd" value="${esc(e.start)}"><input class="t-only" type="time" id="f-st" value="${esc(e.st || '12:00')}"></div></div>
+        <div class="row"><span>종료</span><div class="dt"><input type="date" id="f-ed" value="${esc(e.end)}"><input class="t-only" type="time" id="f-et" value="${esc(e.et || '13:00')}"></div></div>
+      </div>
+      <textarea id="f-memo" placeholder="메모 (장소, 예약 정보 등)" maxlength="500">${esc(e.memo)}</textarea>
+      ${isNew ? '' : '<button class="danger-btn" data-act="del">이 일정 삭제</button>'}
+    </div>`, { type: 'editor', locked: true });
+  if (isNew) { try { $('#f-title').focus({ preventScroll: true }); } catch { } }
+  const back = () => { if (fromDay) renderDaySheet(selected, false); else closeSheet(); };
+  sheet.onchange = ev2 => {
+    const t = ev2.target;
+    if (t.id === 'f-allday') $('#f-card').classList.toggle('allday', t.checked);
+    if (t.id === 'f-sd' || t.id === 'f-ed') {
+      const sd = $('#f-sd').value, ed = $('#f-ed').value;
+      if (t.id === 'f-sd' && sd && (!ed || ed < sd)) $('#f-ed').value = sd;
+      if (t.id === 'f-ed' && ed && sd && ed < sd) $('#f-sd').value = ed;
+    }
+  };
+  sheet.onclick = ev2 => {
+    const ob = ev2.target.closest('[data-owner]');
+    if (ob) { owner = ob.dataset.owner; sheet.querySelectorAll('#f-owner button').forEach(b => b.classList.toggle('on', b.dataset.owner === owner)); return; }
+    const a = ev2.target.closest('[data-act]'); if (!a) return;
+    if (a.dataset.act === 'cancel') back();
+    if (a.dataset.act === 'del') {
+      if (!confirm('이 일정을 삭제할까요?')) return;
+      put('events/' + e.id, null); toast('삭제했어요'); back();
+    }
+    if (a.dataset.act === 'save') {
+      const title = $('#f-title').value.trim();
+      if (!title) { toast('제목을 입력해 주세요'); $('#f-title').focus(); return; }
+      const allDay = $('#f-allday').checked;
+      const sd = isDate($('#f-sd').value) ? $('#f-sd').value : e.start;
+      let ed = isDate($('#f-ed').value) ? $('#f-ed').value : sd;
+      if (ed < sd) ed = sd;
+      const st = allDay ? '' : (TIME.test($('#f-st').value) ? $('#f-st').value : '12:00');
+      let et = allDay ? '' : (TIME.test($('#f-et').value) ? $('#f-et').value : st);
+      if (!allDay && sd === ed && et < st) et = st;
+      put('events/' + e.id, { id: e.id, title, owner, start: sd, end: ed, allDay, st, et, memo: $('#f-memo').value.trim(), by: ev ? ev.by : cfg.me, updated: Date.now() });
+      selected = sd;
+      const dt = parse(sd); cur = { y: dt.getFullYear(), m: dt.getMonth() };
+      renderCalendar();
+      toast('저장했어요');
+      back();
+    }
+  };
+}
+
+/* ---------- 디데이 ---------- */
+function nextYearly(baseDate, from) {
+  const startFrom = baseDate > from ? baseDate : from;
+  const y = +startFrom.slice(0, 4);
+  const c = yearlyOn(y, baseDate.slice(5));
+  return c >= startFrom ? c : yearlyOn(y + 1, baseDate.slice(5));
+}
+const ddBadge = d => d > 0 ? `D-${d}` : d === 0 ? 'D-DAY' : `D+${-d}`;
+function ddayInfo(x) {
+  const t = todayStr();
+  if (x.mode === 'since') {
+    const n = diff(x.date, t) + 1;
+    if (n >= 1) return { badge: `${n.toLocaleString()}일째`, sub: `${fmtDot(x.date)}부터`, key: 50000, cls: '' };
+    const d = diff(t, x.date); return { badge: ddBadge(d), sub: `${fmtDot(x.date)}부터 세기`, key: d, cls: d <= 7 ? 'soon' : '' };
+  }
+  if (x.mode === 'yearly') {
+    const nx = nextYearly(x.date, t), d = diff(t, nx);
+    return { badge: ddBadge(d), sub: `매년 ${+x.date.slice(5, 7)}월 ${+x.date.slice(8, 10)}일 · 다음 ${fmtDot(nx)}`, key: d, cls: d <= 7 ? 'soon' : '' };
+  }
+  const d = diff(t, x.date);
+  return { badge: ddBadge(d), sub: `${fmtDot(x.date)} (${WD[parse(x.date).getDay()]})`, key: d >= 0 ? d : 100000 - d, cls: d < 0 ? 'past' : d <= 7 ? 'soon' : '' };
+}
+function milestones() {
+  const s = S().start; if (!s) return [];
+  const t = todayStr(), n0 = diff(s, t) + 1, out = [];
+  let k = Math.max(100, Math.ceil(n0 / 100) * 100);
+  for (let i = 0; i < 3; i++, k += 100) out.push({ label: `${k}일`, date: addDays(s, k - 1) });
+  const sy = +s.slice(0, 4);
+  let found = 0;
+  for (let y = 1; y <= 80 && found < 2; y++) {
+    const d = yearlyOn(sy + y, s.slice(5));
+    if (d >= t) { out.push({ label: `${y}주년`, date: d }); found++; }
+  }
+  return out.filter(o => o.date >= t).sort((a, b) => a.date < b.date ? -1 : 1).slice(0, 3);
+}
+function renderDday() {
+  const s = S().start, t = todayStr();
+  let hero;
+  if (s) {
+    const n = diff(s, t) + 1;
+    hero = `<section class="hero"><div class="names">${esc(nm('a'))} ${HEART} ${esc(nm('b'))}</div>
+      <div class="big">${n >= 1 ? `함께한 지 <b>${n.toLocaleString()}</b>일` : `처음 만나는 날까지 <b>D-${1 - n}</b>`}</div>
+      <div class="since">${fmtDot(s)}부터</div></section>`;
+  } else {
+    hero = `<div class="hero-empty">사귄 날을 정하면 함께한 날과<br>100일 단위 기념일을 세어 줘요<br><button class="ghost-btn" data-act="start">사귄 날 정하기</button></div>`;
+  }
+  const ms = milestones();
+  const list = Object.values(db.ddays).map(x => ({ x, i: ddayInfo(x) })).sort((a, b) => a.i.key - b.i.key);
+  $('#ddayBody').innerHTML = hero +
+    (ms.length ? `<div class="sec-title">다가오는 기념일</div><div class="mile">${ms.map(m => `<div><b>${m.label}</b><span>${fmtDot(m.date)}</span><em>${ddBadge(diff(t, m.date))}</em></div>`).join('')}</div>` : '') +
+    `<div class="sec-title">우리의 디데이</div>` +
+    (list.length ? list.map(({ x, i }) => `<button class="dd-card" data-id="${esc(x.id)}"><div class="t"><b>${esc(x.title)}</b><span>${esc(i.sub)}</span></div><div class="dd-badge ${i.cls}">${esc(i.badge)}</div></button>`).join('')
+      : `<p class="empty">여행, 생일, 기념일을 추가해 보세요<br><button class="ghost-btn" data-act="add" style="margin-top:12px">디데이 추가</button></p>`);
+}
+$('#ddayAdd').onclick = () => openDdayEditor(null);
+$('#ddayBody').addEventListener('click', e => {
+  const a = e.target.closest('[data-act],[data-id]'); if (!a) return;
+  if (a.dataset.act === 'add') openDdayEditor(null);
+  else if (a.dataset.act === 'start') openStartEditor();
+  else if (a.dataset.id && db.ddays[a.dataset.id]) openDdayEditor(db.ddays[a.dataset.id]);
+});
+function openStartEditor() {
+  openSheet(`<div class="sheet-head"><button class="txt-btn" data-act="cancel">취소</button><h2>사귄 날</h2><button class="txt-btn primary" data-act="save">저장</button></div>
+    <div class="sheet-body"><div class="form-card" style="margin-top:0"><div class="row"><span>날짜</span><div class="dt"><input type="date" id="f-start" value="${esc(S().start || todayStr())}"></div></div></div>
+    <p class="note" style="margin-top:12px">사귄 날을 1일로 세요.</p></div>`, { type: 'start', locked: true });
+  sheet.onclick = e => {
+    const a = e.target.closest('[data-act]'); if (!a) return;
+    if (a.dataset.act === 'cancel') closeSheet();
+    if (a.dataset.act === 'save') { const v = $('#f-start').value; if (!isDate(v)) return; put('settings/start', v); closeSheet(); toast('저장했어요'); }
+  };
+}
+function openDdayEditor(x) {
+  const isNew = !x;
+  const d = x ? { ...x } : { id: uid(), title: '', date: todayStr(), mode: 'until' };
+  let mode = d.mode;
+  const modes = [['until', '다가오는 날'], ['yearly', '매년 반복'], ['since', '며칠째']];
+  const help = { until: '그날까지 남은 날을 D-7처럼 보여줘요.', yearly: '생일처럼 매년 돌아오는 날까지 남은 날을 세요.', since: '그날을 1일로 해서 며칠째인지 세요.' };
+  openSheet(`<div class="sheet-head"><button class="txt-btn" data-act="cancel">취소</button><h2>${isNew ? '디데이 추가' : '디데이 수정'}</h2><button class="txt-btn primary" data-act="save">저장</button></div>
+    <div class="sheet-body">
+      <input class="title-input" id="f-title" placeholder="예: 나트랑 여행, 생일" maxlength="40" value="${esc(d.title)}" enterkeyhint="done">
+      <div class="field-label">세는 방식</div>
+      <div class="seg plain" id="f-mode">${modes.map(([k, l]) => `<button type="button" data-mode="${k}" class="${k === mode ? 'on' : ''}"><span>${l}</span></button>`).join('')}</div>
+      <p class="note" id="f-mode-help" style="margin:10px 2px 0;font-size:12.5px;color:var(--sub)">${help[mode]}</p>
+      <div class="form-card"><div class="row"><span>날짜</span><div class="dt"><input type="date" id="f-date" value="${esc(d.date)}"></div></div></div>
+      ${isNew ? '' : '<button class="danger-btn" data-act="del">이 디데이 삭제</button>'}
+    </div>`, { type: 'dday', locked: true });
+  if (isNew) { try { $('#f-title').focus({ preventScroll: true }); } catch { } }
+  sheet.onclick = e => {
+    const mb = e.target.closest('[data-mode]');
+    if (mb) { mode = mb.dataset.mode; sheet.querySelectorAll('#f-mode button').forEach(b => b.classList.toggle('on', b.dataset.mode === mode)); $('#f-mode-help').textContent = help[mode]; return; }
+    const a = e.target.closest('[data-act]'); if (!a) return;
+    if (a.dataset.act === 'cancel') closeSheet();
+    if (a.dataset.act === 'del') { if (!confirm('이 디데이를 삭제할까요?')) return; put('ddays/' + d.id, null); closeSheet(); toast('삭제했어요'); }
+    if (a.dataset.act === 'save') {
+      const title = $('#f-title').value.trim(), date = $('#f-date').value;
+      if (!title) { toast('이름을 입력해 주세요'); return; }
+      if (!isDate(date)) { toast('날짜를 골라 주세요'); return; }
+      put('ddays/' + d.id, { id: d.id, title, date, mode, updated: Date.now() });
+      closeSheet(); toast('저장했어요');
+    }
+  };
+}
+
+/* ---------- 설정 ---------- */
+function renderSettings() {
+  const active = document.activeElement;
+  if (active && active.closest && active.closest('#setBody') && active.tagName === 'INPUT') return; // 입력 중엔 다시 그리지 않음
+  const me = cfg.me, ot = other(), st = S();
+  let share;
+  if (!syncOn()) {
+    share = `<div class="share-state"><span class="dot"></span>아직 혼자 보는 중이에요</div>
+      <p>연결하면 서로의 일정이 한 달력에 바로 보여요.</p>
+      <div class="pad"><button class="primary-btn" style="margin-top:4px" data-act="connect">상대와 연결하기</button>
+      <button class="secondary-btn" data-act="paste">초대 링크로 연결하기</button></div>`;
+  } else {
+    const partnerIn = !!db.members[ot];
+    const line = syncState === 'on' ? (partnerIn ? `${esc(nm(ot))}님과 함께 보는 중` : `${esc(nm(ot))}님을 기다리는 중`)
+      : syncState === 'error' ? '연결 오류' : syncState === 'offline' ? '오프라인' : '연결하는 중…';
+    const dot = syncState === 'on' ? (partnerIn ? 'on' : 'wait') : syncState === 'error' ? 'err' : 'wait';
+    share = `<div class="share-state"><span class="dot ${dot}"></span>${line}</div>
+      ${syncState === 'error' && syncMsg ? `<p>${esc(syncMsg)}</p>` : ''}
+      ${syncState === 'on' && !partnerIn ? `<p>${esc(nm(ot))}님이 아직 초대 링크로 들어오지 않았어요.</p>` : ''}
+      ${syncState === 'offline' ? '<p>인터넷이 연결되면 자동으로 맞춰져요.</p>' : ''}
+      ${queue.length ? `<p>아직 보내지 못한 변경 ${queue.length}개</p>` : ''}
+      <div class="pad"><button class="${partnerIn ? 'secondary-btn' : 'primary-btn'}" style="margin-top:4px" data-act="invite">초대 링크 ${partnerIn ? '다시 ' : ''}보내기</button>
+      ${partnerIn ? '' : '<button class="secondary-btn" data-act="paste">내가 받은 초대 링크로 연결</button>'}
+      <button class="link-btn danger" data-act="leave">이 폰에서 공유 끊기</button></div>`;
+  }
+  const colorLine = (o, label) => `<button class="color-line" data-pick="${o}"><span>${label}</span><i style="--c:${esc(col(o))}"></i></button>`;
+  $('#setBody').innerHTML = `
+    <div class="card"><h3>함께 보기</h3>${share}</div>
+    <div class="card"><h3>우리</h3>
+      <div class="row"><span>나</span><input class="inp" data-name="${nameKey(me)}" value="${esc(st[nameKey(me)])}" placeholder="이름" maxlength="10"></div>
+      <div class="row"><span>상대</span><input class="inp" data-name="${nameKey(ot)}" value="${esc(st[nameKey(ot)])}" placeholder="이름" maxlength="10"></div>
+      <div class="row"><span>사귄 날</span><input class="inp" type="date" data-name="start" value="${esc(st.start)}"></div>
+    </div>
+    <div class="card"><h3>색깔</h3>
+      ${colorLine(me, `${esc(nm(me))} 일정`)}${colorLine(ot, `${esc(nm(ot))} 일정`)}${colorLine('both', '함께 (데이트·여행)')}
+    </div>
+    <div class="card"><h3>백업</h3><div class="pad"><div class="btn-row"><button class="ghost-btn" data-act="export">백업 파일 저장</button><button class="ghost-btn" data-act="import">불러오기</button></div></div></div>
+    ${isStandalone() ? '' : `<div class="card"><h3>폰에 설치</h3><p>${IS_IOS ? 'Safari 공유 버튼 → "홈 화면에 추가"' : '브라우저 메뉴(⋮) → "홈 화면에 추가" 또는 "앱 설치"'}</p></div>`}
+    <p class="foot">나와 상대가 바뀌어 보이나요? <button data-act="swap">바꾸기</button></p>`;
+}
+const setBody = $('#setBody');
+setBody.addEventListener('change', e => {
+  const t = e.target, k = t.dataset.name;
+  if (!['nameA', 'nameB', 'start'].includes(k)) return;
+  const v = k === 'start' ? (isDate(t.value) ? t.value : null) : (t.value.trim().slice(0, 20) || null);
+  t.blur();
+  put('settings/' + k, v);
+});
+setBody.addEventListener('click', e => {
+  const pick = e.target.closest('[data-pick]');
+  if (pick) return openPalette(pick.dataset.pick);
+  const a = e.target.closest('[data-act]'); if (!a) return;
+  const act = a.dataset.act;
+  if (act === 'connect') stepConnect(false);
+  if (act === 'paste') stepPaste(false);
+  if (act === 'invite') shareInvite();
+  if (act === 'leave') {
+    if (!confirm('이 폰에서 공유를 끊을까요?\n이 폰의 일정은 그대로 남고, 상대 폰의 달력은 그대로예요.')) return;
+    fetch(`${base()}/members/${cfg.me}.json`, { method: 'DELETE' }).catch(() => { }); // 상대 화면에 '기다리는 중'으로 보이게
+    cfg.dbUrl = ''; cfg.code = ''; cfg.host = false; saveCfg(); queue = []; saveQueue(); connect(); renderSettings();
+  }
+  if (act === 'swap') {
+    cfg.me = other(); saveCfg();
+    announced = false; if (syncOn() && syncState === 'on') announce();
+    renderAll(); toast(`이 폰은 이제 ${nm(cfg.me)}님 폰이에요`);
+  }
+  if (act === 'export') {
+    const blob = new Blob([JSON.stringify({ settings: db.settings, events: db.events, ddays: db.ddays }, null, 2)], { type: 'application/json' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob); link.download = `우리달력-백업-${todayStr()}.json`;
+    document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 4000);
+  }
+  if (act === 'import') $('#importFile').click();
+});
+function openPalette(o) {
+  const key = colorKey(o), label = o === 'both' ? '함께 일정' : `${nm(o)} 일정`;
+  openSheet(`<div class="sheet-head"><h2>${esc(label)} 색깔</h2><button class="icon-btn" data-act="close" aria-label="닫기">${CLOSE}</button></div>
+    <div class="sheet-body"><div class="palette">${PALETTE.map(c => `<button class="sw ${S()[key].toLowerCase() === c.toLowerCase() ? 'on' : ''}" style="--c:${c}" data-c="${c}" aria-label="${c}"></button>`).join('')}</div></div>`, { type: 'palette' });
+  sheet.onclick = e => {
+    if (e.target.closest('[data-act="close"]')) return closeSheet();
+    const b = e.target.closest('[data-c]'); if (!b) return;
+    put('settings/' + key, b.dataset.c);
+    closeSheet();
+  };
+}
+$('#importFile').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  try {
+    const data = normalize(JSON.parse(await f.text()));
+    const ne = Object.keys(data.events).length, nd = Object.keys(data.ddays).length;
+    if (!confirm(`백업을 불러올까요?\n일정 ${ne}개, 디데이 ${nd}개가 지금 달력에 합쳐져요.`)) return;
+    const ops = [['settings', data.settings]];
+    for (const [k, v] of Object.entries(data.events)) ops.push(['events/' + k, v]);
+    for (const [k, v] of Object.entries(data.ddays)) ops.push(['ddays/' + k, v]);
+    commit(ops);
+    toast('불러왔어요');
+  } catch { toast('백업 파일을 읽지 못했어요'); }
+});
+
+/* ---------- 탭 ---------- */
+function switchTab(tab) {
+  curTab = tab;
+  document.querySelectorAll('#tabbar button').forEach(x => x.classList.toggle('on', x.dataset.tab === tab));
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + tab));
+  if (sheetOpen && !(sheetCtx && sheetCtx.type === 'welcome')) closeSheet();
+  renderAll();
+}
+$('#tabbar').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) switchTab(b.dataset.tab); });
+
+let toastT;
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 2200); }
+
+/* ---------- 처음 시작 · 연결 ---------- */
+function installHint() {
+  if (isStandalone()) return '';
+  return IS_IOS
+    ? '<div class="hint"><b>먼저 홈 화면에 추가해 주세요</b><br>Safari 공유 버튼 → "홈 화면에 추가"<br>아이폰은 Safari와 홈 화면 앱의 저장 공간이 따로라서, 홈 화면 앱에서 시작해야 일정이 이어져요.</div>'
+    : '<div class="hint"><b>홈 화면에 추가하면 앱처럼 쓸 수 있어요</b><br>브라우저 메뉴(⋮) → "홈 화면에 추가" 또는 "앱 설치"</div>';
+}
+function onAct(handlers) {
+  sheet.onclick = e => { const a = e.target.closest('[data-act]'); if (a && handlers[a.dataset.act]) handlers[a.dataset.act](a); };
+}
+function openWelcome() {
+  openSheet(`<div class="welcome">
+      <div class="w-logo">${VENN}</div>
+      <h2>우리 달력</h2>
+      <p>둘의 일정을 한 달력에서 함께 봐요</p>
+      ${installHint()}
+      <button class="primary-btn" data-act="new">처음 시작할게요</button>
+      <button class="secondary-btn" data-act="join">초대 링크를 받았어요</button>
+    </div>`, { type: 'welcome', locked: true });
+  onAct({ new: stepNames, join: () => stepPaste(true) });
+}
+function stepNames() {
+  openSheet(`<div class="sheet-head"><button class="txt-btn" data-act="back">뒤로</button><h2>우리 소개</h2><span style="width:40px"></span></div>
+    <div class="sheet-body">
+      <div class="form-card" style="margin-top:0">
+        <div class="row"><span>내 이름</span><input class="inp" id="o-a" placeholder="예: 지민" maxlength="10" style="text-align:right" value="${esc(S().nameA)}"></div>
+        <div class="row"><span>상대 이름</span><input class="inp" id="o-b" placeholder="예: 서준" maxlength="10" style="text-align:right" value="${esc(S().nameB)}"></div>
+        <div class="row"><span>사귄 날 <small style="color:var(--sub);font-weight:500">(선택)</small></span><input class="inp" type="date" id="o-s" value="${esc(S().start)}"></div>
+      </div>
+      <button class="primary-btn" data-act="next">다음</button>
+    </div>`, { type: 'welcome', locked: true });
+  onAct({
+    back: openWelcome,
+    next: () => {
+      const na = $('#o-a').value.trim().slice(0, 20), nb = $('#o-b').value.trim().slice(0, 20), sd = $('#o-s').value;
+      if (!na || !nb) { toast('두 사람 이름을 입력해 주세요'); return; }
+      cfg.me = 'a'; saveCfg();
+      commit([['settings/nameA', na], ['settings/nameB', nb], ['settings/start', isDate(sd) ? sd : null]]);
+      stepConnect(true);
+    }
+  });
+}
+function stepConnect(fromWelcome) {
+  if (validDbUrl(FIREBASE_URL)) { startShare(FIREBASE_URL); stepInvite(); return; }
+  openSheet(`<div class="sheet-head"><h2>상대와 연결하기</h2>${fromWelcome ? '' : `<button class="icon-btn" data-act="close" aria-label="닫기">${CLOSE}</button>`}</div>
+    <div class="sheet-body">
+      <p class="note">안내서 1단계에서 복사한 Firebase 주소를 붙여넣어 주세요. 처음 한 번만 하면 돼요.</p>
+      <div class="paste-row"><input class="full-inp" id="c-url" placeholder="https://….firebasedatabase.app" inputmode="url" autocapitalize="off" autocomplete="off" spellcheck="false"><button class="ghost-btn" data-act="pasteUrl">붙여넣기</button></div>
+      <button class="primary-btn" data-act="go">연결하기</button>
+      <button class="link-btn" data-act="close">나중에 할게요</button>
+    </div>`, { type: fromWelcome ? 'welcome' : 'connect', locked: true });
+  onAct({
+    close: () => closeSheet(),
+    pasteUrl: () => pasteInto($('#c-url')),
+    go: () => {
+      const u = $('#c-url').value.trim();
+      if (!validDbUrl(u)) { toast('Firebase 주소를 확인해 주세요'); return; }
+      startShare(u);
+      stepInvite();
+    }
+  });
+}
+function stepInvite() {
+  openSheet(`<div class="welcome">
+      <div class="w-logo">${VENN}</div>
+      <h2>초대 링크 보내기</h2>
+      <p>${esc(nm(other()))}님이 이 링크로 들어오면<br>서로의 일정이 한 달력에 보여요.</p>
+      <button class="primary-btn" data-act="share">초대 링크 보내기</button>
+      <button class="link-btn" data-act="done">다 보냈어요</button>
+    </div>`, { type: 'invite', locked: true });
+  onAct({ share: shareInvite, done: () => closeSheet() });
+}
+function stepPaste(fromWelcome) {
+  openSheet(`<div class="sheet-head">${fromWelcome ? '<button class="txt-btn" data-act="back">뒤로</button>' : '<span></span>'}<h2>초대 링크로 연결</h2>${fromWelcome ? '<span style="width:40px"></span>' : `<button class="icon-btn" data-act="close" aria-label="닫기">${CLOSE}</button>`}</div>
+    <div class="sheet-body">
+      <p class="note">상대에게 받은 초대 링크를 붙여넣어 주세요.</p>
+      <div class="paste-row"><input class="full-inp" id="j-link" placeholder="초대 링크" autocapitalize="off" autocomplete="off" spellcheck="false"><button class="ghost-btn" data-act="pasteLink">붙여넣기</button></div>
+      <button class="primary-btn" data-act="go">연결하기</button>
+    </div>`, { type: fromWelcome ? 'welcome' : 'join', locked: true });
+  onAct({
+    back: openWelcome,
+    close: () => closeSheet(),
+    pasteLink: () => pasteInto($('#j-link')),
+    go: () => {
+      const o = readToken($('#j-link').value);
+      if (!o) { toast('초대 링크를 확인해 주세요'); return; }
+      doJoin(o);
+    }
+  });
+}
+function doJoin(o) { joinWith(o); closeSheet(); toast('연결했어요. 일정을 불러오는 중이에요'); }
+function openJoinFromLink(token) {
+  const o = readToken(token);
+  if (!o) { toast('초대 링크가 올바르지 않아요'); if (!S().nameA && !syncOn()) openWelcome(); return; }
+  if (syncOn() && o.c === cfg.code) { toast('이미 연결된 달력이에요'); return; }
+  if (IS_IOS && !isStandalone()) {
+    const link = inviteLink(token);
+    openSheet(`<div class="welcome">
+        <div class="w-logo">${VENN}</div>
+        <h2>초대받았어요</h2>
+        <p>아이폰은 홈 화면에 추가한 앱에서 연결해야<br>일정이 계속 저장돼요.</p>
+        <ol class="steps"><li>아래 버튼으로 초대 링크 복사</li><li>Safari 공유 버튼 → "홈 화면에 추가"</li><li>홈 화면의 우리달력 앱 → "초대 링크를 받았어요" → 붙여넣기</li></ol>
+        <button class="primary-btn" data-act="copy">초대 링크 복사</button>
+        <button class="link-btn" data-act="here">이 브라우저에서 그냥 쓸게요</button>
+      </div>`, { type: 'welcome', locked: true });
+    onAct({ copy: () => copyText(link), here: () => doJoin(o) });
+    return;
+  }
+  openSheet(`<div class="welcome">
+      <div class="w-logo">${VENN}</div>
+      <h2>초대받았어요</h2>
+      <p>연결하면 상대 일정과 내 일정을<br>한 달력에서 함께 봐요.</p>
+      ${installHint()}
+      <button class="primary-btn" data-act="go">연결하기</button>
+      <button class="link-btn" data-act="no">취소</button>
+    </div>`, { type: 'welcome', locked: true });
+  onAct({ go: () => doJoin(o), no: () => { if (!S().nameA && !syncOn()) openWelcome(); else closeSheet(); } });
+}
+function openInAppNotice() {
+  openSheet(`<div class="welcome">
+      <div class="w-logo">${VENN}</div>
+      <h2>브라우저에서 열어 주세요</h2>
+      <p>메신저 안에서 열면 일정이 저장되지 않아요.<br>${IS_IOS ? 'Safari' : 'Chrome 같은 브라우저'}에서 열어 주세요.</p>
+      ${IS_KAKAO ? '<button class="primary-btn" data-act="kakao">다른 브라우저로 열기</button>' : '<p class="note">화면 위나 아래의 메뉴에서 "다른 브라우저로 열기"를 눌러 주세요.</p>'}
+      <button class="secondary-btn" data-act="copy">링크 복사</button>
+    </div>`, { type: 'welcome', locked: true });
+  onAct({
+    kakao: () => { location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(location.href); },
+    copy: () => copyText(location.href)
+  });
+}
+
+/* ---------- 시작 ---------- */
+function boot() {
+  applyColors();
+  renderStatus();
+  renderCalendar();
+  requestAnimationFrame(renderCalendar); // 화면 크기가 잡힌 뒤 칸 높이에 맞춰 다시 그림
+  if (IN_APP) {
+    if (IS_KAKAO) location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(location.href);
+    openInAppNotice();
+    return;
+  }
+  const m = location.hash.match(/join=([A-Za-z0-9_-]+)/);
+  if (m) {
+    history.replaceState(null, '', location.pathname + location.search);
+    openJoinFromLink(m[1]);
+  } else if (!S().nameA && !syncOn()) {
+    openWelcome();
+  }
+  connect();
+  try { navigator.storage && navigator.storage.persist && navigator.storage.persist().catch(() => { }); } catch { }
+  if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => { });
+  let lastDay = todayStr();
+  setInterval(() => { const t = todayStr(); if (t !== lastDay) { lastDay = t; renderAll(); } }, 60000); // 자정이 지나면 오늘 표시 갱신
+}
+boot();
+</script>
+</body>
+</html>
