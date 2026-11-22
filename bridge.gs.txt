@@ -169,11 +169,8 @@ function buildDesiredEvents_(source, config) {
   const byDay = {};
   Object.keys(source.events).forEach(function (id) {
     const event = source.events[id];
-    const start = event.start < today ? today : event.start;
-    const end = event.end > last ? last : event.end;
-    if (start > end) return;
-    for (let day = start; day <= end; day = addDateText_(day, 1)) {
-      (byDay[day] || (byDay[day] = [])).push(event);
+    for (let day = today; day <= last; day = addDateText_(day, 1)) {
+      if (occursOn_(event, day)) (byDay[day] || (byDay[day] = [])).push(event);
     }
   });
 
@@ -211,6 +208,12 @@ function sourceResource_(event, me, sourceId) {
     if (Date.parse(end) <= Date.parse(start)) end = new Date(Date.parse(start) + 60000).toISOString();
     resource.start = { dateTime: start, timeZone: URI_BRIDGE.timezone };
     resource.end = { dateTime: end, timeZone: URI_BRIDGE.timezone };
+  }
+  if (event.rep) {
+    const untilPart = event.until ? ';UNTIL=' + event.until.replace(/-/g, '') + (event.allDay ? '' : 'T145959Z') : '';
+    const rules = ['RRULE:FREQ=' + event.rep.toUpperCase() + (event.rep === 'monthly' ? ';BYMONTHDAY=' + Number(event.start.slice(8, 10)) : '') + untilPart];
+    event.skip.forEach(function (d) { rules.push(event.allDay ? 'EXDATE;VALUE=DATE:' + d.replace(/-/g, '') : 'EXDATE;TZID=Asia/Seoul:' + d.replace(/-/g, '') + 'T' + event.st.replace(':', '') + '00'); });
+    resource.recurrence = rules;
   }
   resource.id = deterministicId_('event:' + sourceId);
   return resource;
@@ -318,7 +321,10 @@ function cleanEvent_(id, raw) {
     id: String(id), title: text_(raw.title, 60) || '(제목 없음)',
     owner: ['a', 'b', 'both'].indexOf(raw.owner) >= 0 ? raw.owner : 'a',
     start: start, end: end, allDay: allDay, st: allDay ? '' : st, et: allDay ? '' : et,
-    memo: text_(raw.memo, 500)
+    memo: text_(raw.memo, 500),
+    rep: ['daily', 'weekly', 'monthly', 'yearly'].indexOf(raw.rep) >= 0 ? raw.rep : '',
+    until: validDate_(raw.until) && raw.until >= start ? raw.until : '',
+    skip: (Array.isArray(raw.skip) ? raw.skip : plainObject_(raw.skip) ? Object.keys(raw.skip).map(function (k) { return raw.skip[k]; }) : []).filter(validDate_).slice(0, 300)
   };
 }
 
@@ -393,4 +399,19 @@ function validDate_(value) {
   const p = String(value).split('-').map(Number);
   const d = new Date(Date.UTC(p[0], p[1] - 1, p[2]));
   return p[0] >= 1900 && p[0] <= 2200 && d.getUTCFullYear() === p[0] && d.getUTCMonth() === p[1] - 1 && d.getUTCDate() === p[2];
+}
+
+function occursOn_(e, day) {
+  if (!e.rep) return e.start <= day && e.end >= day;
+  const dayMs = function (s) { const p = s.split('-').map(Number); return Date.UTC(p[0], p[1] - 1, p[2]); };
+  const len = Math.round((dayMs(e.end) - dayMs(e.start)) / 864e5);
+  for (let back = 0; back <= len; back++) {
+    const o = addDateText_(day, -back);
+    if (o < e.start) break;
+    if (e.until && o > e.until) continue;
+    if (e.skip.indexOf(o) >= 0) continue;
+    const gap = Math.round((dayMs(o) - dayMs(e.start)) / 864e5);
+    if (e.rep === 'daily' || (e.rep === 'weekly' && gap % 7 === 0) || (e.rep === 'monthly' && o.slice(8) === e.start.slice(8)) || (e.rep === 'yearly' && o.slice(5) === e.start.slice(5))) return true;
+  }
+  return false;
 }

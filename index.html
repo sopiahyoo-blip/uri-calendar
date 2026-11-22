@@ -142,6 +142,18 @@ textarea{width:100%;margin-top:16px;min-height:84px;border:1px solid var(--line)
 .switch b::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2);transition:.2s}
 .switch input:checked+b{background:var(--text)}
 .switch input:checked+b::after{transform:translateX(20px)}
+.time-btn{text-align:left;width:100%;font-weight:600}
+.sugg{display:flex;gap:6px;overflow-x:auto;padding:8px 0 2px;scrollbar-width:none;min-height:0}.sugg::-webkit-scrollbar{display:none}.sugg:empty{display:none}
+.sugg button{flex:none;padding:6px 11px;border-radius:999px;background:var(--soft);font-size:13px;font-weight:600;white-space:nowrap}
+#f-rep{min-width:110px}
+.wheel-pop{position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,.35);display:flex;align-items:flex-end;justify-content:center}
+.wheel-card{width:100%;max-width:520px;background:var(--bg,#fff);border-radius:20px 20px 0 0;padding:6px 14px calc(14px + env(safe-area-inset-bottom))}
+.wheel-head{display:flex;align-items:center;justify-content:space-between;padding:8px 2px 4px}
+.wheels{position:relative;display:grid;grid-template-columns:1fr 1fr 1fr;height:200px;overflow:hidden}
+.wheel{height:200px;overflow-y:scroll;scroll-snap-type:y mandatory;padding:80px 0;box-sizing:border-box;scrollbar-width:none;position:relative;z-index:1;-webkit-mask-image:linear-gradient(transparent,#000 30%,#000 70%,transparent);mask-image:linear-gradient(transparent,#000 30%,#000 70%,transparent)}
+.wheel::-webkit-scrollbar{display:none}
+.wi{height:40px;line-height:40px;text-align:center;font-size:20px;font-weight:600;scroll-snap-align:center}
+.wheel-band{position:absolute;left:0;right:0;top:80px;height:40px;border-radius:10px;background:var(--soft)}
 .danger-btn{width:100%;margin-top:18px;padding:13px;border-radius:12px;color:var(--red);font-weight:700;background:#fdf0f0}
 .primary-btn{width:100%;margin-top:14px;padding:14px;border-radius:12px;color:#fff;font-weight:800;background:var(--text);font-size:15px}
 .secondary-btn{width:100%;margin-top:10px;padding:14px;border-radius:12px;font-weight:800;background:var(--soft);font-size:15px}
@@ -335,7 +347,10 @@ function cleanEvent(id, e) {
   return {
     id, title: str(e.title, 60) || '(제목 없음)', owner: ['a', 'b', 'both'].includes(e.owner) ? e.owner : 'a',
     start: e.start, end, allDay, st: allDay ? '' : st, et: allDay ? '' : et, memo: str(e.memo, 500),
-    by: e.by === 'b' ? 'b' : 'a', updated: Number.isFinite(e.updated) ? e.updated : 0
+    by: e.by === 'b' ? 'b' : 'a', updated: Number.isFinite(e.updated) ? e.updated : 0,
+    rep: ['daily', 'weekly', 'monthly', 'yearly'].includes(e.rep) ? e.rep : '',
+    until: isDate(e.until) && e.until >= e.start ? e.until : '',
+    skip: (Array.isArray(e.skip) ? e.skip : isObj(e.skip) ? Object.values(e.skip) : []).filter(isDate).slice(0, 300)
   };
 }
 function cleanDday(id, x) {
@@ -720,7 +735,31 @@ function evSort(a, b) {
   if (a.allDay !== b.allDay) return a.allDay ? -1 : 1;
   return a.st < b.st ? -1 : a.st > b.st ? 1 : 0;
 }
-const eventsOn = date => visibleEvents().filter(e => e.start <= date && e.end >= date).sort((a, b) => {
+const REP_LABEL = { daily: '매일', weekly: '매주', monthly: '매월', yearly: '매년' };
+function addMonthsExact(s, n) { const y = +s.slice(0, 4), m = +s.slice(5, 7) - 1 + n, d = +s.slice(8, 10); const dt = new Date(y, m, d); return dt.getDate() === d ? ymd(dt) : ''; }
+// 반복 일정을 [from, to] 구간에 실제로 보이는 날짜들로 펼침
+function expandEvent(e, from, to) {
+  if (!e.rep) return e.start <= to && e.end >= from ? [e] : [];
+  const len = diff(e.start, e.end), last = e.until && e.until < to ? e.until : to, out = [], skip = e.skip || [];
+  const push = s => { if (!s || s > last) return; const en = addDays(s, len); if (en < from || skip.includes(s)) return; out.push({ ...e, start: s, end: en, occ: s }); };
+  if (e.rep === 'daily' || e.rep === 'weekly') {
+    const step = e.rep === 'daily' ? 1 : 7;
+    const k = Math.max(0, Math.floor((diff(e.start, from) - len) / step));
+    for (let s = addDays(e.start, k * step); s <= last && out.length < 400; s = addDays(s, step)) push(s);
+  } else {
+    const ms = e.rep === 'monthly' ? 1 : 12;
+    const months = (+from.slice(0, 4) - +e.start.slice(0, 4)) * 12 + (+from.slice(5, 7) - +e.start.slice(5, 7));
+    let k = Math.max(0, Math.floor((months - Math.ceil(len / 28) - 1) / ms));
+    for (let n = 0; n < 600; n++, k++) {
+      const s = addMonthsExact(e.start, k * ms), probe = s || addMonthsExact(e.start.slice(0, 8) + '01', k * ms);
+      if (probe > last) break;
+      push(s);
+    }
+  }
+  return out;
+}
+const expandedIn = (from, to) => visibleEvents().flatMap(e => expandEvent(e, from, to));
+const eventsOn = date => expandedIn(date, date).sort((a, b) => {
   const am = a.start !== a.end, bm = b.start !== b.end;
   if (am !== bm) return am ? -1 : 1;
   if (a.allDay !== b.allDay) return a.allDay ? -1 : 1;
@@ -757,7 +796,7 @@ function renderCalendar() {
   const rowH = h ? h / weeks : 90;
   const lanes = Math.max(1, Math.floor((rowH - 24 - 13) / 17));
   const today = todayStr();
-  const evs = visibleEvents().sort(evSort);
+  const evs = expandedIn(gridStart, addDays(gridStart, weeks * 7 - 1)).sort(evSort);
   let html = '';
   for (let w = 0; w < weeks; w++) {
     const ws = addDays(gridStart, w * 7), we = addDays(ws, 6);
@@ -877,41 +916,54 @@ function renderDaySheet(date, refresh) {
     const a = e.target.closest('[data-act],[data-id]'); if (!a) return;
     if (a.dataset.act === 'close') closeSheet();
     else if (a.dataset.act === 'add') openEditor(null, date, true);
-    else if (a.dataset.id && db.events[a.dataset.id]) openEditor(db.events[a.dataset.id], date, true);
+    else if (a.dataset.id && db.events[a.dataset.id]) openEditor(db.events[a.dataset.id], date, true, a.dataset.occ || '');
   };
 }
 function evItem(e) {
   const multi = e.start !== e.end;
   const when = e.allDay ? (multi ? `${fmtMD(e.start)} ~ ${fmtMD(e.end)} · 종일` : '종일')
     : (multi ? `${fmtMD(e.start)} ${e.st} ~ ${fmtMD(e.end)} ${e.et}` : `${e.st} ~ ${e.et}`);
+  const repTxt = e.rep ? ' · ' + REP_LABEL[e.rep] : '';
   const c = esc(col(e.owner));
-  return `<button class="ev-item" data-id="${esc(e.id)}" style="--c:${c}"><span class="stripe"></span><div style="min-width:0;flex:1">
+  return `<button class="ev-item" data-id="${esc(e.id)}" data-occ="${esc(e.occ || '')}" style="--c:${c}"><span class="stripe"></span><div style="min-width:0;flex:1">
     <div class="ev-title">${esc(e.title)}</div>
-    <div class="ev-sub">${esc(when)} · <b style="color:${c}">${esc(nm(e.owner))}</b></div>
+    <div class="ev-sub">${esc(when + repTxt)} · <b style="color:${c}">${esc(nm(e.owner))}</b></div>
     ${e.memo ? `<div class="ev-memo">${esc(e.memo)}</div>` : ''}</div></button>`;
 }
 
 /* 일정 만들기·고치기 */
-function openEditor(ev, date, fromDay) {
+function openEditor(ev, date, fromDay, occ) {
   const isNew = !ev;
-  const e = ev ? { ...ev } : { id: uid(), title: '', owner: cfg.me, start: date, end: date, allDay: false, st: '12:00', et: '13:00', memo: '' };
+  const e = ev ? { ...ev } : { id: uid(), title: '', owner: cfg.me, start: date, end: date, allDay: false, st: '12:00', et: '13:00', memo: '', rep: '', until: '', skip: [] };
   let owner = e.owner;
   openSheet(`
     <div class="sheet-head"><button class="txt-btn" data-act="cancel">취소</button><h2>${isNew ? '새 일정' : '일정 수정'}</h2><button class="txt-btn primary" data-act="save">저장</button></div>
     <div class="sheet-body">
-      <input class="title-input" id="f-title" placeholder="제목" maxlength="60" value="${esc(e.title)}" enterkeyhint="done">
+      <input class="title-input" id="f-title" name="dunal-title-${Date.now()}" placeholder="제목" maxlength="60" value="${esc(e.title)}" enterkeyhint="done" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <div class="sugg" id="f-sugg"></div>
       <div class="field-label">누구 일정?</div>
       <div class="seg" id="f-owner">${['a', 'b', 'both'].map(o => `<button type="button" data-owner="${o}" style="--c:${esc(col(o))}" class="${o === owner ? 'on' : ''}"><i></i><span>${esc(nm(o))}</span></button>`).join('')}</div>
       <div class="form-card ${e.allDay ? 'allday' : ''}" id="f-card">
         <label class="row"><span>종일</span><span class="switch"><input type="checkbox" id="f-allday" ${e.allDay ? 'checked' : ''}><b></b></span></label>
-        <div class="event-period"><label>시작 날짜<input class="inp" type="date" id="f-sd" value="${esc(e.start)}"></label><label class="t-only">시작 시간<input class="inp" type="time" step="60" id="f-st" value="${esc(e.st || '12:00')}"></label></div>
-        <div class="event-period"><label>종료 날짜<input class="inp" type="date" id="f-ed" value="${esc(e.end)}"></label><label class="t-only">종료 시간<input class="inp" type="time" step="60" id="f-et" value="${esc(e.et || '13:00')}"></label></div>
+        <div class="event-period"><label>시작 날짜<input class="inp" type="date" id="f-sd" value="${esc(e.start)}"></label><label class="t-only">시작 시간<input type="hidden" id="f-st" value="${esc(e.st || '12:00')}"><button type="button" class="inp time-btn" data-act="pick" data-for="f-st"></button></label></div>
+        <div class="event-period"><label>종료 날짜<input class="inp" type="date" id="f-ed" value="${esc(e.end)}"></label><label class="t-only">종료 시간<input type="hidden" id="f-et" value="${esc(e.et || '13:00')}"><button type="button" class="inp time-btn" data-act="pick" data-for="f-et"></button></label></div>
+        <label class="row"><span>반복</span><select class="inp" id="f-rep">${[['', '안 함'], ['daily', '매일'], ['weekly', '매주'], ['monthly', '매월'], ['yearly', '매년']].map(([v, t]) => `<option value="${v}" ${(e.rep || '') === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+        <label class="row rep-only" id="f-until-row" ${e.rep ? '' : 'hidden'}><span>반복 종료 <small style="color:var(--sub);font-weight:500">(비우면 계속)</small></span><input class="inp" type="date" id="f-until" value="${esc(e.until || '')}"></label>
       </div>
-      <textarea id="f-memo" placeholder="메모 (장소, 예약 정보 등)" maxlength="500">${esc(e.memo)}</textarea>
-      ${isNew ? '' : '<button class="danger-btn" data-act="del">이 일정 삭제</button>'}
+      <textarea id="f-memo" placeholder="메모 (장소, 예약 정보 등)" maxlength="500" autocomplete="off">${esc(e.memo)}</textarea>
+      ${isNew ? '' : (e.rep && occ ? '<button class="danger-btn" data-act="delOne">이 날 일정만 삭제</button><button class="danger-btn" style="margin-top:8px" data-act="del">반복 일정 전체 삭제</button>' : '<button class="danger-btn" data-act="del">이 일정 삭제</button>')}
     </div>`, { type: 'editor', locked: true });
   if (isNew) { try { $('#f-title').focus({ preventScroll: true }); } catch { } }
   const back = () => { if (fromDay) renderDaySheet(selected, false); else closeSheet(); };
+  const refreshTimeBtns = () => sheet.querySelectorAll('.time-btn').forEach(b => { b.textContent = fmtTime($('#' + b.dataset.for).value); });
+  refreshTimeBtns();
+  // 자주 쓰는 제목: 화면을 가리지 않는 한 줄 칩
+  const freq = {}; for (const x of Object.values(db.events)) freq[x.title] = (freq[x.title] || 0) + 1;
+  const topTitles = Object.entries(freq).sort((p, q) => q[1] - p[1]).map(p => p[0]).filter(t => t && t !== '(제목 없음)');
+  const drawSugg = () => { const q = $('#f-title').value.trim(); const list = topTitles.filter(t => t !== q && (!q || t.includes(q))).slice(0, 8);
+    $('#f-sugg').innerHTML = list.map(t => `<button type="button" data-sugg="${esc(t)}">${esc(t)}</button>`).join(''); };
+  drawSugg(); $('#f-title').addEventListener('input', drawSugg);
+  if (e.rep && occ && occ !== e.start) toast('반복 일정은 전체가 함께 수정돼요');
   let followStart = isNew;
   sheet.onchange = ev2 => {
     const t = ev2.target;
@@ -924,19 +976,29 @@ function openEditor(ev, date, fromDay) {
       $('#f-et').value = String((Number(hr)+1)%24).padStart(2,'0')+':'+min;
     }
     if (t.id === 'f-allday') $('#f-card').classList.toggle('allday', t.checked);
+    if (t.id === 'f-rep') $('#f-until-row').hidden = !t.value;
     if (t.id === 'f-sd' || t.id === 'f-ed') {
       const sd = $('#f-sd').value, ed = $('#f-ed').value;
       if (t.id === 'f-sd' && sd && (!ed || ed < sd)) $('#f-ed').value = sd;
       if (t.id === 'f-ed' && ed && sd && ed < sd) $('#f-sd').value = ed;
     }
+    refreshTimeBtns();
   };
   sheet.onclick = ev2 => {
     const ob = ev2.target.closest('[data-owner]');
     if (ob) { owner = ob.dataset.owner; sheet.querySelectorAll('#f-owner button').forEach(b => b.classList.toggle('on', b.dataset.owner === owner)); return; }
+    const sg = ev2.target.closest('[data-sugg]');
+    if (sg) { $('#f-title').value = sg.dataset.sugg; $('#f-title').blur(); drawSugg(); return; }
     const a = ev2.target.closest('[data-act]'); if (!a) return;
+    if (a.dataset.act === 'pick') { const inp = $('#' + a.dataset.for); openTimeWheel(inp.value, v => { inp.value = v; inp.dispatchEvent(new Event('change', { bubbles: true })); refreshTimeBtns(); }); return; }
     if (a.dataset.act === 'cancel') back();
+    if (a.dataset.act === 'delOne') {
+      if (!confirm(`${fmtMD(occ)} 일정만 삭제할까요?`)) return;
+      const cur0 = db.events[e.id] || e;
+      put('events/' + e.id, { ...cur0, skip: [...(cur0.skip || []), occ], updated: Date.now() }); toast('이 날 일정만 삭제했어요'); back(); return;
+    }
     if (a.dataset.act === 'del') {
-      if (!confirm('이 일정을 삭제할까요?')) return;
+      if (!confirm(e.rep ? '반복 일정을 모두 삭제할까요?' : '이 일정을 삭제할까요?')) return;
       put('events/' + e.id, null); toast('삭제했어요'); back();
     }
     if (a.dataset.act === 'save') {
@@ -949,7 +1011,10 @@ function openEditor(ev, date, fromDay) {
       const st = allDay ? '' : $('#f-st').value, et = allDay ? '' : $('#f-et').value;
       if (!allDay && (!TIME.test(st) || !TIME.test(et))) { toast('시작 시간과 종료 시간을 입력해 주세요'); return; }
       if (!allDay && sd === ed && et < st) { toast('종료 시간을 시작 이후로 설정하거나 종료 날짜를 바꿔 주세요'); $('#f-et').focus(); return; }
-      put('events/' + e.id, { id: e.id, title, owner, start: sd, end: ed, allDay, st, et, memo: $('#f-memo').value.trim(), by: ev ? ev.by : cfg.me, updated: Date.now() });
+      const rep = $('#f-rep').value, until = rep && isDate($('#f-until').value) ? $('#f-until').value : '';
+      if (until && until < sd) { toast('반복 종료일은 시작 날짜 이후로 골라 주세요'); return; }
+      const skip = rep && rep === e.rep && sd === e.start ? (e.skip || []) : [];
+      put('events/' + e.id, { id: e.id, title, owner, start: sd, end: ed, allDay, st, et, memo: $('#f-memo').value.trim(), by: ev ? ev.by : cfg.me, updated: Date.now(), rep, until, skip });
       selected = sd;
       const dt = parse(sd); cur = { y: dt.getFullYear(), m: dt.getMonth() };
       renderCalendar();
@@ -957,6 +1022,26 @@ function openEditor(ev, date, fromDay) {
       back();
     }
   };
+}
+
+function fmtTime(v) { if (!TIME.test(v || '')) return '시간 선택'; const [hh, mm] = v.split(':').map(Number); return `${hh < 12 ? '오전' : '오후'} ${hh % 12 || 12}:${String(mm).padStart(2, '0')}`; }
+function openTimeWheel(value, done) {
+  const [h0, m0] = TIME.test(value || '') ? value.split(':').map(Number) : [12, 0];
+  const mins = []; for (let m = 0; m < 60; m += 5) mins.push(m); if (!mins.includes(m0)) { mins.push(m0); mins.sort((p, q) => p - q); }
+  const cols = [['오전', '오후'], Array.from({ length: 12 }, (_, i) => String(i + 1)), mins.map(m => String(m).padStart(2, '0'))];
+  const sel = [h0 < 12 ? 0 : 1, (h0 % 12 || 12) - 1, mins.indexOf(m0)];
+  const pop = document.createElement('div'); pop.className = 'wheel-pop';
+  pop.innerHTML = `<div class="wheel-card" role="dialog" aria-label="시간 선택"><div class="wheel-head"><button type="button" class="txt-btn" data-w="x">취소</button><b>시간 선택</b><button type="button" class="txt-btn primary" data-w="ok">확인</button></div>
+    <div class="wheels"><div class="wheel-band"></div>${cols.map((c, i) => `<div class="wheel" data-col="${i}">${c.map((t, j) => `<div class="wi" data-i="${j}">${t}</div>`).join('')}</div>`).join('')}</div></div>`;
+  document.body.appendChild(pop);
+  const wheels = [...pop.querySelectorAll('.wheel')];
+  wheels.forEach((w, i) => { w.scrollTop = sel[i] * 40; w.addEventListener('click', ev => { const it = ev.target.closest('.wi'); if (it) w.scrollTo({ top: +it.dataset.i * 40, behavior: 'smooth' }); }); });
+  const idx = w => Math.max(0, Math.min(w.children.length - 1, Math.round(w.scrollTop / 40)));
+  const close = () => pop.remove();
+  pop.addEventListener('click', ev => {
+    if (ev.target === pop || ev.target.closest('[data-w="x"]')) return close();
+    if (ev.target.closest('[data-w="ok"]')) { const ap = idx(wheels[0]), hr = idx(wheels[1]) + 1, mn = mins[idx(wheels[2])]; const H = (hr % 12) + (ap ? 12 : 0); close(); done(String(H).padStart(2, '0') + ':' + String(mn).padStart(2, '0')); }
+  });
 }
 
 /* ---------- 디데이 ---------- */

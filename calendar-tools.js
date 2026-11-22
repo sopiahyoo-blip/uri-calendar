@@ -138,6 +138,9 @@
       endTime,
       memo: safeText(raw.memo, 2000),
       owner: ['a', 'b', 'both'].includes(raw.owner) ? raw.owner : '',
+      rep: ['daily', 'weekly', 'monthly', 'yearly'].includes(raw.rep) ? raw.rep : '',
+      until: parseDate(raw.until) && raw.until >= start ? raw.until : '',
+      skip: (Array.isArray(raw.skip) ? raw.skip : []).filter(d => parseDate(d)),
       updated: Number.isFinite(raw.updated) ? raw.updated : 0
     };
   }
@@ -221,6 +224,12 @@
         if (event.end !== event.start || event.endTime !== event.startTime) {
           lines.push(`DTEND;TZID=${DEFAULT_TIME_ZONE}:${compactLocal(event.end, event.endTime)}`);
         }
+      }
+      if (event.rep) {
+        const untilPart = event.until ? (event.allDay ? `;UNTIL=${compactDate(event.until)}` : `;UNTIL=${compactDate(event.until)}T235959Z`) : '';
+        const byDay = event.rep === 'monthly' ? `;BYMONTHDAY=${Number(event.start.slice(8, 10))}` : '';
+        lines.push(`RRULE:FREQ=${event.rep.toUpperCase()}${byDay}${untilPart}`);
+        for (const d of event.skip) lines.push(event.allDay ? `EXDATE;VALUE=DATE:${compactDate(d)}` : `EXDATE;TZID=${DEFAULT_TIME_ZONE}:${compactLocal(d, event.startTime)}`);
       }
       if (includeAlarm) {
         const reminder = resolveReminder(event, reminderTime);
